@@ -1,0 +1,11 @@
+# 배포에 들어갈 필요 없는 것들
+weeklypick/
+docker/
+Dockerfile
+docker-compose.yml
+.dockerignore
+README.md
+assets/images/README.md
+_qa*.html
+.DS_Store
+**/.DS_Store

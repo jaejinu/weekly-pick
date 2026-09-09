@@ -1,0 +1,10 @@
+# Vercel
+.vercel
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# 작업 중 임시 파일
+_qa*.html
+node_modules/

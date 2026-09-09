@@ -1,0 +1,10 @@
+# 이미지에 들어갈 필요 없는 것들
+# 주의: docker/nginx.conf 는 Dockerfile 이 COPY 하므로 제외하면 안 된다
+weeklypick/
+docker-compose.yml
+README*.md
+assets/images/README.md
+.git/
+.DS_Store
+**/.DS_Store
+_qa.html
