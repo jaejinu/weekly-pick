@@ -4,6 +4,8 @@
 
 **🔗 https://weekly-pick.vercel.app**
 
+> Auto-deploy: `main` 브랜치 push 시 Vercel 자동 배포
+
 | | |
 |---|---|
 | 배포 | https://weekly-pick.vercel.app |
