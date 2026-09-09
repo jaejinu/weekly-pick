@@ -2,6 +2,15 @@
 
 이번 주말 갈 수 있는 서울의 전시·팝업만 골라, 매주 목요일 발행하는 큐레이션 매거진 모바일웹.
 
+**🔗 https://weekly-pick.vercel.app**
+
+| | |
+|---|---|
+| 배포 | https://weekly-pick.vercel.app |
+| 저장소 | https://github.com/jaejinu/weekly-pick (private) |
+| 화면 | 11개 · 해시 라우팅 · localStorage |
+| 용량 | 18개 파일 · 1.14MB |
+
 ## 실행
 
 ### 1) Docker (권장)
@@ -30,9 +39,16 @@ docker run -d --name weeklypick -p 8080:80 weeklypick:1.0
 해시 라우팅 폴백을 처리합니다.
 
 ```bash
-npx vercel login       # 최초 1회 (브라우저 인증)
-npx vercel --prod      # 배포
+npx vercel --prod      # 재배포 (로그인은 최초 1회: npx vercel login)
 ```
+
+**Git 자동 배포를 켜려면** — Vercel GitHub App에 이 저장소 접근 권한을 준 뒤:
+
+```bash
+npx vercel git connect
+```
+
+권한 부여: https://github.com/apps/vercel → Configure → `jaejinu/weekly-pick` 추가
 
 - Framework Preset은 **Other**로 두면 됩니다 (빌드 명령 없음)
 - `.vercelignore`가 문서·Docker 파일을 배포에서 제외합니다
