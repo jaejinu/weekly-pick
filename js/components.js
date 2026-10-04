@@ -231,19 +231,6 @@ function errorStateHTML(title, desc, ctaLabel, ctaHref) {
     '<a class="btn btn--primary" href="' + ctaHref + '">' + esc(ctaLabel) + '</a></div>';
 }
 
-/* ---------- State/Skeleton ---------- */
-function skeletonCardHTML() {
-  return '<div class="skeleton-card"><div class="skeleton skeleton-card__media"></div>' +
-    '<div class="skeleton skeleton-line"></div>' +
-    '<div class="skeleton skeleton-line skeleton-line--short"></div></div>';
-}
-function skeletonRowHTML() {
-  return '<div class="skeleton-row"><div class="skeleton skeleton-row__media"></div>' +
-    '<div class="skeleton-stack"><div class="skeleton skeleton-line"></div>' +
-    '<div class="skeleton skeleton-line skeleton-line--short"></div>' +
-    '<div class="skeleton skeleton-line"></div></div></div>';
-}
-
 /* ---------- Navigation ---------- */
 function appHeaderHTML() {
   return '<header class="app-header" id="app-header">' +
@@ -281,7 +268,7 @@ function bottomNavHTML(active) {
 function stickyBarHTML(buttons, note) {
   return '<div class="sticky-bar">' +
     (note ? '<p class="sticky-bar__note">' + esc(note) + '</p>' : '') +
-    buttons + '</div>';
+    '<div class="sticky-bar__actions">' + buttons + '</div></div>';
 }
 
 /* ---------- 공통 고지 ---------- */

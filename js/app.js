@@ -36,6 +36,7 @@ function render() {
   const r = parseHash();
   const name = r.parts[0] || 'home';
   const id = r.parts[1];
+  if (!(name === 'review' && ['new', 'edit'].includes(id))) ui.draft = null;
 
   // 목록 화면을 떠날 때 스크롤 위치 기억
   if (currentRoute) ui.scrollMemory[currentRoute] = window.scrollY;
@@ -51,6 +52,7 @@ function render() {
     case 'reviews':   html = screenReviewFeed(); break;
     case 'review':
       if (r.parts[1] === 'new') { html = screenReviewWrite(r.parts[2]); }
+      else if (r.parts[1] === 'edit') { const review = getReview(r.parts[2]); html = review && review.mine ? screenReviewWrite(review.exhibitionId, review.id) : screenReviewDetail(r.parts[2]); }
       else { html = screenReviewDetail(id); }
       break;
     case 'saved':     html = screenSaved(); activeTab = 'saved'; break;
@@ -63,7 +65,7 @@ function render() {
   }
 
   const usesBar = ['exhibition', 'article'].indexOf(name) !== -1 ||
-    (name === 'review' && r.parts[1] === 'new');
+    (name === 'review' && ['new', 'edit'].includes(r.parts[1]));
   const navHTML = usesBar ? '' : bottomNavHTML(activeTab);
 
   app.innerHTML = html + navHTML;
@@ -122,10 +124,11 @@ function screenHome() {
   return appHeaderHTML() +
     '<main class="content-container screen--with-nav">' +
       '<section class="issue-head">' +
+        '<p class="service-message">이번 주말, 갈 만한 것만.</p>' +
         '<h1>' + esc(ISSUE.title) + '</h1>' +
         (ISSUE.isDelayed
           ? '<p class="issue-head__meta issue-head__meta--notice">발행 예정 ' + esc(ISSUE.nextIssueLabel) + ' · 지난 호를 먼저 보세요</p>'
-          : '<p class="issue-head__meta">' + esc(ISSUE.publishedLabel) + ' · ' + esc(ISSUE.weekendLabel) + '</p>') +
+          : '<p class="issue-head__meta">' + esc(ISSUE.publishedLabel) + ' · ' + esc(weekendLabel()) + '</p>') +
         pickHeroHTML(hero) +
       '</section>' +
 
@@ -142,7 +145,7 @@ function screenHome() {
       '</section>' +
 
       '<section class="section" aria-labelledby="sec-ending">' +
-        '<div class="section-header"><h2 id="sec-ending">이번 주에 끝나요</h2></div>' +
+        '<div class="section-header"><h2 id="sec-ending">곧 끝나요</h2></div>' +
         '<div class="slider" role="group" aria-label="종료 임박 전시 ' + ending.length + '곳">' +
           ending.map(function (e) { return exhibitionCardHTML(e, 'slide'); }).join('') +
         '</div>' +
@@ -205,7 +208,7 @@ function screenDiscover() {
   } else {
     body =
       '<div class="result-summary" aria-live="polite">' +
-        '<strong>전시 ' + list.length + '곳</strong><span>이번 주에 끝나는 순</span>' +
+        '<strong>전시 ' + list.length + '곳</strong><span>종료 임박 · 이번 주 픽 순</span>' +
       '</div>' +
       '<div class="card-list">' + open.map(function (e) { return exhibitionCardHTML(e, 'row'); }).join('') + '</div>' +
       (closed.length
@@ -244,26 +247,10 @@ function suggestHTML() {
 }
 
 function emptyResultHTML() {
-  const q = ui.discover;
-  let firstLabel, firstAction;
-  if (q.lastChip) {
-    firstLabel = '‘' + q.lastChip + '’ 조건 풀기';
-    firstAction = 'release-last';
-  } else if (q.term) {
-    firstLabel = '검색어 지우기';
-    firstAction = 'clear-term';
-  } else {
-    firstLabel = '전체 초기화';
-    firstAction = 'reset-filters';
-  }
-  return '<div class="empty-state" aria-live="polite">' +
-    '<i class="fa-solid fa-magnifying-glass empty-state__icon" aria-hidden="true"></i>' +
-    '<h2>이 조건에 맞는 전시가 없어요</h2>' +
-    '<p>조건을 하나 풀거나 전체를 되돌려 보세요.</p>' +
-    '<div class="empty-actions">' +
-      '<button type="button" class="btn btn--primary btn--full" data-action="' + firstAction + '">' + esc(firstLabel) + '</button>' +
-      '<button type="button" class="btn btn--secondary btn--full" data-action="reset-filters">전체 초기화</button>' +
-    '</div></div>';
+  return '<div class="result-summary" aria-live="polite"><strong>전시 0곳</strong></div>' +
+    '<div class="empty-state"><h2>조건에 맞는 전시가 없어요</h2>' +
+    '<p>검색어를 짧게 바꾸거나 필터를 풀어 보세요.</p>' +
+    '<button class="btn btn--primary" data-action="reset-filters">검색·필터 초기화</button></div>';
 }
 
 /* ============ 화면: 전시 상세 ============ */
@@ -285,14 +272,17 @@ function screenExhibition(id) {
   const sameRegion = exhibitionsByRegion(ex.regionId).filter(function (e) { return e.id !== ex.id; });
   const region = getRegion(ex.regionId);
 
-  const bar = closed
-    ? '<a class="btn btn--primary btn--full" href="#/review/new/' + ex.id + '">' +
-      '<i class="fa-solid fa-pen" aria-hidden="true"></i>후기 남기기</a>'
-    : '<button type="button" class="btn ' + (saved ? 'btn--primary btn--saved' : 'btn--outline') +
-        '" data-action="toggle-save" data-id="' + ex.id + '" aria-pressed="' + saved + '">' +
-        '<i class="fa-' + (saved ? 'solid' : 'regular') + ' fa-bookmark" aria-hidden="true"></i>' +
-        (saved ? '저장됨' : '저장') + '</button>' +
-      '<a class="btn btn--primary" href="#/review/new/' + ex.id + '">후기 남기기</a>';
+  const upcoming = getRuntimeStatus(ex) === 'upcoming';
+  const own = myReviewOf(ex.id);
+  const reviewAction = own
+    ? '<a class="btn btn--primary" href="#/review/edit/' + own.id + '">내 후기 수정</a>'
+    : '<a class="btn btn--primary" href="#/review/new/' + ex.id + '">후기 남기기</a>';
+  const saveAction = '<button type="button" class="btn btn--outline" data-action="toggle-save" data-id="' + ex.id + '" aria-pressed="' + saved + '">' + (saved ? '저장됨' : '저장') + '</button>';
+  const bar = upcoming ? saveAction + (plannedDay(ex.id)
+    ? '<a class="btn btn--primary" href="#/my">주말 계획 보기</a>'
+    : '<button type="button" class="btn btn--primary" data-action="assign" data-id="' + ex.id + '" data-day="sat">계획에 넣기</button>')
+    : closed ? (state.visits[ex.id] ? '' : '<button type="button" class="btn btn--outline" data-action="visit" data-id="' + ex.id + '">다녀왔어요</button>') + reviewAction
+    : saveAction + reviewAction;
 
   return detailHeaderHTML(ex.title, { overlay: true }) +
     '<div class="detail-hero' + (closed ? ' detail-hero--closed' : '') + '">' +
@@ -305,18 +295,17 @@ function screenExhibition(id) {
       '<p class="detail-meta">' + esc(ex.venue) + ' · ' + esc(region ? region.name : '') + '<br>' +
         '<time datetime="' + ex.start + '">' + esc(shortDate(ex.start)) + '</time>–' +
         '<time datetime="' + ex.end + '">' + esc(shortDate(ex.end)) + '</time></p>' +
-      (soon ? '<p class="detail-dday"><span class="detail-dday__label">종료까지</span>' +
-        '<span class="detail-dday__num">' + daysLeft(ex) + '</span>' +
-        '<span class="detail-dday__unit">일</span></p>' : '') +
-      (closed ? '<div class="closed-notice"><i class="fa-solid fa-circle-info" aria-hidden="true"></i>' +
-        '<span>이 전시는 ' + esc(longDate(ex.end)) + '에 끝났어요. 후기는 남길 수 있어요.</span></div>' : '') +
+      (soon ? (daysLeft(ex) === 0 ? '<p class="detail-dday">오늘까지예요.</p>' : '<p class="detail-dday">종료까지 <strong>' + daysLeft(ex) + '</strong>일</p>') : '') +
+      (upcoming ? '<div class="status-notice"><strong>' + longDate(ex.start) + '부터 열려요.</strong><p>시작 전에는 방문과 후기를 기록할 수 없어요. 미리 저장하거나 주말 계획에 넣어 보세요.</p></div>' : '') +
+      (closed ? '<div class="closed-notice">이 전시는 ' + longDate(ex.end) + '에 끝났어요. 다녀왔다면 방문과 후기를 남길 수 있어요.</div>' : '') +
+      (state.visits[ex.id] ? '<p class="visit-status">✓ 다녀온 전시예요 · ' + esc(state.visits[ex.id]) + ' 기록</p>' : '') +
 
       infoStripHTML(ex, 'detail') +
 
       // 에디터 한 줄은 섹션 제목 없이 스트립 바로 아래에 붙인다.
       // 430x800 첫 화면 안에 스트립과 에디터 한 줄이 함께 들어와야 한다 (기획 11장).
       editorNoteHTML(ex) +
-      '<section class="detail-section"><h2>가기 전에 알아두면 좋아요</h2>' + tipListHTML(ex) + '</section>' +
+      '<section class="detail-section"><h2>' + (closed ? '전시 기록' : '가기 전에 알아두면 좋아요') + '</h2>' + tipListHTML(ex) + '</section>' +
       '<section class="detail-section"><h2>오시는 길</h2>' + directionCardHTML(ex) + '</section>' +
 
       '<section class="detail-section">' +
@@ -329,8 +318,7 @@ function screenExhibition(id) {
           : '<div class="empty-state empty-state--inline">' +
             '<i class="fa-solid fa-pen empty-state__icon" aria-hidden="true"></i>' +
             '<h2>아직 이 전시 후기가 없어요</h2>' +
-            '<p>다녀오셨다면 첫 줄을 남겨 주세요.</p>' +
-            '<a class="btn btn--primary" href="#/review/new/' + ex.id + '">후기 남기기</a></div>') +
+            (upcoming ? '<p>아직 시작 전이라 후기가 없어요.</p></div>' : '<p>다녀오셨다면 첫 줄을 남겨 주세요.</p>' + reviewAction + '</div>')) +
       '</section>' +
 
       (sameRegion.length ? '<section class="detail-section"><h2>같은 동네 전시</h2>' +
@@ -339,7 +327,7 @@ function screenExhibition(id) {
 
       sampleNoteHTML('가상의 전시와 장소로 만든 샘플 콘텐츠입니다.') +
     '</main>' +
-    stickyBarHTML(bar);
+    stickyBarHTML(bar, upcoming ? longDate(ex.start) + '부터 방문과 후기를 기록할 수 있어요' : null);
 }
 
 function longDate(iso) {
@@ -366,9 +354,9 @@ function screenArticle(id) {
   stops.forEach(function (s, i) {
     const meta = s.time + ' · ' + priceLabel(s.ex) + ' · ' + s.ex.duration + '분';
     stopsHTML += stopCardHTML(s.ex, labels[i], meta);
-    if (i < stops.length - 1 && article.moves[i]) {
+    if (i < stops.length - 1) {
       stopsHTML += '<p class="article-move"><i class="fa-solid fa-arrow-down" aria-hidden="true"></i>' +
-        esc(article.moves[i]) + '</p>';
+        '예상 이동 ' + getTravelMinutes(s.ex.regionId, stops[i + 1].ex.regionId) + '분' + '</p>';
     }
   });
 
@@ -386,13 +374,14 @@ function screenArticle(id) {
         '<p class="article-body__sub">' + esc(article.subtitle) + '</p>' +
         '<div class="article-body__text">' +
           article.body.map(function (p) { return '<p>' + esc(p) + '</p>'; }).join('') +
+          '<p>관람 ' + minutesLabel(articleViewMinutes(article)) + ', 예상 이동 ' + minutesLabel(articleMoveMinutes(article)) + '. 전체 ' + minutesLabel(articleViewMinutes(article) + articleMoveMinutes(article)) + ' 코스예요.</p>' +
         '</div>' +
       '</div>' +
       '<section class="detail-section"><h2>이 코스의 순서</h2>' + stopsHTML + '</section>' +
       '<section class="detail-section">' +
         '<div class="summary-list"><h2>이 코스 한눈에</h2><dl>' +
           '<div><dt>관람</dt><dd>' + minutesLabel(articleViewMinutes(article)) + '</dd></div>' +
-          '<div><dt>이동</dt><dd>' + minutesLabel(article.moveMinutes) + '</dd></div>' +
+          '<div><dt>이동</dt><dd>' + minutesLabel(articleMoveMinutes(article)) + '</dd></div>' +
           '<div><dt>비용</dt><dd>' + (cost === 0 ? '0원' : cost.toLocaleString('ko-KR') + '원') + '</dd></div>' +
         '</dl><p class="summary-list__note">관람 시간과 이동 시간은 따로 셌어요.</p></div>' +
       '</section>' +
@@ -450,6 +439,7 @@ function screenReviewDetail(id) {
         '<p class="review-detail__text">' + esc(review.text) + '</p>' +
         '<p class="review-detail__meta">' + esc(review.day) + ' 방문 · 웨이팅 ' +
           (review.waiting ? '있음' : '없음') + (review.mine ? ' · 내 후기' : '') + '</p>' +
+        (review.mine ? '<p class="visit-status">✓ 다녀온 전시로 기록됨</p><div class="review-actions"><a class="btn btn--outline" href="#/review/edit/' + review.id + '">수정</a><button class="btn btn--text" data-action="delete-review" data-id="' + review.id + '">삭제</button></div><p class="form-note">후기를 수정하거나 삭제할 수 있어요.</p>' : '') +
       '</div>' +
       '<section class="detail-section"><h2>이 전시의 다른 후기</h2>' +
         (others.length
@@ -457,8 +447,7 @@ function screenReviewDetail(id) {
           : '<div class="empty-state empty-state--inline">' +
             '<i class="fa-solid fa-pen empty-state__icon" aria-hidden="true"></i>' +
             '<h2>이 전시 후기는 아직 하나예요</h2>' +
-            '<p>다녀오셨다면 한 줄 더해 주세요.</p>' +
-            '<a class="btn btn--primary" href="#/review/new/' + ex.id + '">후기 남기기</a></div>') +
+            '<p>다른 관람객의 후기도 곧 만나 보세요.</p></div>') +
       '</section>' +
       sampleNoteHTML() +
     '</main>';
@@ -466,7 +455,7 @@ function screenReviewDetail(id) {
 
 /* ============ 화면: 후기 작성 ============ */
 
-function screenReviewWrite(exId) {
+function screenReviewWrite(exId, editId) {
   const ex = getExhibition(exId);
   if (!ex) {
     return detailHeaderHTML('후기 남기기') +
@@ -474,28 +463,19 @@ function screenReviewWrite(exId) {
       errorStateHTML('찾는 전시가 없어요', '이번 호 목록에서 다시 골라 주세요.', '이번 호 보기', '#/home') +
       '</main>';
   }
-  if (!ui.draft || ui.draft.exId !== exId) {
-    ui.draft = { exId: exId, rating: 0, text: '', day: '', waiting: null, done: false, doneId: null };
+  if (!canWriteReview(ex)) return detailHeaderHTML('후기 남기기') + '<main class="content-container">' +
+    emptyStateHTML('fa-calendar', '아직 시작 전인 전시예요', longDate(ex.start) + '부터 후기를 남길 수 있어요.', '전시로 돌아가기', '#/exhibition/' + ex.id) + '</main>';
+  const existing = myReviewOf(exId);
+  if (!editId && existing) return screenReviewWrite(exId, existing.id);
+  if (!ui.draft || ui.draft.exId !== exId || ui.draft.editId !== (editId || null)) {
+    const original = editId ? getReview(editId) : null;
+    ui.draft = { exId: exId, editId: editId || null, rating: original ? original.rating : 0, text: original ? original.text : '',
+      day: original ? original.day : '', waiting: original ? (original.waiting ? 'yes' : 'no') : null, done: false };
   }
   const d = ui.draft;
 
-  if (d.done) {
-    return detailHeaderHTML('후기 남기기') +
-      '<main class="content-container screen--with-nav">' +
-        '<div class="done-state">' +
-          '<div class="done-state__icon"><i class="fa-solid fa-check" aria-hidden="true"></i></div>' +
-          '<h1>고마워요. 다음 호에 반영할게요</h1>' +
-          '<p>남겨 주신 한 줄은 다른 사람이 고를 때 근거가 돼요.</p>' +
-          '<div class="done-state__actions">' +
-            '<a class="btn btn--primary btn--full" href="#/reviews">내 후기 보기</a>' +
-            '<a class="btn btn--secondary btn--full" href="#/exhibition/' + ex.id + '">전시로 돌아가기</a>' +
-          '</div>' +
-        '</div>' +
-      '</main>';
-  }
-
   const over = d.text.length > 80;
-  const canSubmit = d.rating >= 1 && d.text.trim().length > 0 && !over;
+  const canSubmit = d.rating >= 1 && d.text.trim().length > 0 && !over && d.day && d.waiting !== null;
 
   let stars = '';
   for (let i = 1; i <= 5; i++) {
@@ -512,16 +492,17 @@ function screenReviewWrite(exId) {
     return chipHTML(p[0], d.waiting === p[1], 'set-waiting', p[1]);
   }).join('');
 
-  return detailHeaderHTML('후기 남기기') +
+  return detailHeaderHTML(editId ? '후기 수정' : '후기 남기기') +
     '<main class="content-container screen--with-bar">' +
       '<div class="detail-body">' +
         '<h1 class="sr-only">' + esc(ex.title) + ' 후기 남기기</h1>' +
-        '<span class="review-card-label">이 전시를 다녀오셨나요?</span>' +
+        '<span class="review-card-label">' + (editId ? '내 후기 수정' : '이 전시를 다녀오셨나요?') + '</span>' +
+        (editId ? '<p class="review-edit-banner">수정 중 · ' + esc(getReview(editId).createdAt) + ' 작성</p>' : '') +
         stopCardHTML(ex, null, venueAndPeriod(ex), { href: null }) +
       '</div>' +
       '<section class="form-block">' +
         '<p class="form-block__label" id="rating-label">얼마나 좋았나요?</p>' +
-        '<p class="form-block__hint">별을 눌러 점수를 골라 주세요</p>' +
+        '<p class="form-block__hint">' + (d.rating ? '현재 ' + d.rating + '점 · 별을 눌러 바꿀 수 있어요' : '별을 눌러 점수를 골라 주세요') + '</p>' +
         '<div class="rating-input" role="radiogroup" aria-labelledby="rating-label">' + stars + '</div>' +
       '</section>' +
       '<section class="form-block">' +
@@ -544,12 +525,13 @@ function screenReviewWrite(exId) {
         '<p class="form-block__label" id="wait-label">웨이팅이 있었나요?</p>' +
         '<div class="choice-row" role="group" aria-labelledby="wait-label">' + waitChips + '</div>' +
       '</section>' +
-      '<p class="form-note">후기는 이 브라우저에만 저장돼요.</p>' +
+      '<p class="form-note">' + (editId ? '수정해도 방문 완료 상태는 그대로 유지됩니다.' : '후기를 등록하면 방문 기록도 함께 저장돼요.') + '</p>' +
     '</main>' +
     stickyBarHTML(
       '<button type="button" class="btn btn--primary btn--full" data-action="submit-review"' +
-      (canSubmit ? '' : ' disabled') + '>후기 등록</button>',
-      canSubmit ? null : '별점과 한 줄을 채우면 등록할 수 있어요'
+      (canSubmit ? '' : ' disabled') + '>' + (editId ? '수정 완료' : '후기 등록') + '</button>' +
+      (editId ? '<button class="btn btn--outline" data-action="cancel-edit">취소</button>' : ''),
+      canSubmit ? null : '별점·후기·방문 정보를 입력해 주세요'
     );
 }
 
@@ -562,8 +544,8 @@ function screenSaved() {
   if (!list.length) {
     return '<main class="content-container screen--with-nav">' +
       '<div class="screen-head"><h1>저장한 전시</h1></div>' +
-      emptyStateHTML('fa-bookmark', '아직 저장한 전시가 없어요',
-        '이번 호부터 골라볼까요?', '이번 호 보기', '#/home') +
+      emptyStateHTML('fa-bookmark', '마음에 드는 전시를 저장해 보세요',
+        '전시의 북마크를 누르면 여기에 모여요. 저장한 전시로 주말 계획을 만들 수 있어요.', '전시 둘러보기', '#/discover') +
       sampleNoteHTML() + '</main>';
   }
 
@@ -576,7 +558,7 @@ function screenSaved() {
         const label = '<span class="ex-card__plan-label' + (day ? ' ex-card__plan-label--placed' : '') + '">' +
           '<i class="fa-' + (day ? 'solid' : 'regular') + ' fa-calendar" aria-hidden="true"></i>' +
           (day === 'sat' ? '토요일에 있어요' : day === 'sun' ? '일요일에 있어요' : '아직 안 넣었어요') + '</span>';
-        return exhibitionCardHTML(e, 'row', label);
+        return '<div>' + exhibitionCardHTML(e, 'row', label) + (!day && !isClosed(e) ? '<div class="saved-plan-actions"><button class="btn btn--outline btn--compact" data-action="assign" data-id="' + e.id + '" data-day="sat">토요일에 넣기</button><button class="btn btn--outline btn--compact" data-action="assign" data-id="' + e.id + '" data-day="sun">일요일에 넣기</button></div>' : '') + '</div>';
       }).join('') + '</div>' +
       '<a class="btn btn--primary btn--full btn--inline-cta" href="#/my">주말 계획 세우기</a>' +
       '<p class="form-note">저장은 이 브라우저에서만 유지돼요.</p>' +
@@ -588,7 +570,6 @@ function screenSaved() {
 
 function screenMy() {
   const savedList = state.saved.map(getExhibition).filter(Boolean);
-  const unplaced = savedList.filter(function (e) { return plannedDay(e.id) === null && !isClosed(e); });
   const myReviews = state.reviews.map(function (r) { return Object.assign({}, r, { mine: true }); });
   const recentList = state.recent.map(getExhibition).filter(Boolean);
 
@@ -596,7 +577,7 @@ function screenMy() {
 
   return '<main class="content-container screen--with-nav">' +
       '<div class="screen-head"><h1>내 주말</h1>' +
-        '<p class="screen-head__sub">' + esc(ISSUE.weekendLabel) + '</p></div>' +
+        '<p class="screen-head__sub">' + esc(weekendLabel()) + '</p></div>' +
 
       '<div class="summary-tiles">' +
         summaryTile(savedList.length, '저장') +
@@ -607,19 +588,7 @@ function screenMy() {
       (noSaved
         ? emptyStateHTML('fa-calendar-week', '저장한 전시가 없어 계획을 세울 수 없어요',
             '이번 호에서 갈 곳을 먼저 골라 주세요.', '이번 호 보기', '#/home', true)
-        : (unplaced.length
-            ? '<section class="section"><div class="section-header"><h2>아직 안 넣은 전시</h2></div>' +
-              '<div class="card-list card-list--tight">' + unplaced.map(function (e) {
-                return '<div>' + stopCardHTML(e, null, e.duration + '분 · ' + priceLabel(e), { compact: true }) +
-                  '<div class="day-slot__actions">' +
-                  '<button type="button" class="btn btn--outline btn--compact" data-action="assign" data-id="' +
-                    e.id + '" data-day="sat">토요일에 넣기</button>' +
-                  '<button type="button" class="btn btn--outline btn--compact" data-action="assign" data-id="' +
-                    e.id + '" data-day="sun">일요일에 넣기</button>' +
-                  '</div></div>';
-              }).join('') + '</div></section>'
-            : '') +
-          '<section class="section"><div class="section-header"><h2>주말 계획</h2></div>' +
+        : '<section class="section weekend-plan"><div class="section-header"><h2>주말 계획</h2></div><a class="btn btn--outline" href="#/saved">저장한 전시에서 추가</a>' +
             daySlotHTML('sat', '토요일', ISSUE.weekend.sat) +
             daySlotHTML('sun', '일요일', ISSUE.weekend.sun) +
           '</section>') +
@@ -641,6 +610,7 @@ function screenMy() {
               '이번 호부터 둘러보세요.', '이번 호 보기', '#/home', true)) +
       '</section>' +
 
+      '<details class="demo-settings"><summary>데모 날짜 설정</summary><p>가상 전시의 계획 전·방문 후 상태를 확인해 보세요.</p><div class="choice-row">' + DEMO_DATES.map(function (date) { return chipHTML(date === ISSUE_DATE ? '9.10 목 · 계획하는 날' : '9.14 월 · 다녀온 뒤', state.currentDate === date, 'demo-date', date); }).join('') + '</div></details>' +
       '<a class="link-row" href="#/archive"><span>지난 호 보기</span>' +
         '<i class="fa-solid fa-chevron-right" aria-hidden="true"></i></a>' +
 
@@ -655,49 +625,39 @@ function summaryTile(value, label) {
 }
 
 function daySlotHTML(day, dayLabel, dateISO) {
-  const ids = state.plan[day];
-  const total = dayTotalMinutes(day);
-  const over = total > PLAN_LIMIT_MIN;
-  const other = day === 'sat' ? 'sun' : 'sat';
-  const otherLabel = day === 'sat' ? '일요일로 옮기기' : '토요일로 옮기기';
-
-  const items = ids.map(function (id) {
-    const ex = getExhibition(id);
-    if (!ex) return '';
-    return '<li><div class="plan-item">' +
-      '<span class="plan-item__thumb">' + imageTag(ex.image, '', 60, 60) + '</span>' +
-      '<span class="plan-item__body">' +
-        '<span class="plan-item__title">' + esc(ex.title) + '</span>' +
-        '<span class="plan-item__meta">' + ex.duration + '분 · ' + esc(priceLabel(ex)) + '</span>' +
-      '</span></div>' +
-      '<div class="day-slot__actions">' +
-        '<button type="button" class="btn btn--outline btn--compact" data-action="assign" data-id="' +
-          ex.id + '" data-day="' + other + '">' + otherLabel + '</button>' +
-        '<button type="button" class="btn btn--outline btn--compact" data-action="unplan" data-id="' +
-          ex.id + '">계획에서 빼기</button>' +
-      '</div></li>';
+  const rows = calculateTimeline(day), totals = calculateTotalDuration(day);
+  const parts = minutesParts(totals.total);
+  const totalHTML = (parts.h !== null ? '<span class="day-slot__total-num">' + parts.h + '</span><span class="day-slot__total-unit">시간</span>' : '') +
+    (parts.m || parts.h === null ? '<span class="day-slot__total-num">' + parts.m + '</span><span class="day-slot__total-unit">분</span>' : '');
+  const other = day === 'sat' ? 'sun' : 'sat', otherLabel = day === 'sat' ? '일요일로' : '토요일로';
+  let options = '';
+  for (let minutes = 600; minutes <= 900; minutes += 30) {
+    const time = clockLabel(minutes);
+    options += '<option value="' + time + '"' + (state.dayStartTime[day] === time ? ' selected' : '') + '>' + time + '</option>';
+  }
+  const items = rows.map(function (row, i) {
+    const ex = row.ex, own = myReviewOf(ex.id);
+    const visit = state.currentDate >= dateISO && canMarkVisited(ex) ? (state.visits[ex.id]
+      ? '<span class="visit-status">✓ 다녀왔어요</span> <a class="btn btn--outline btn--compact" href="#/review/' + (own ? 'edit/' + own.id : 'new/' + ex.id) + '">' + (own ? '후기 수정' : '후기 남기기') + '</a>'
+      : '<button class="btn btn--outline btn--compact" data-action="visit" data-id="' + ex.id + '">다녀왔어요</button>') : '';
+    return '<li>' + (row.travel ? '<p class="timeline-travel">예상 이동 ' + row.travel + '분 <span>· 권역 기준 예상 시간</span></p>' : '') +
+      '<div class="timeline-stop"><div class="timeline-times"><strong>' + clockLabel(row.start) + '</strong><span>' + clockLabel(row.end) + '</span></div>' +
+      '<div class="timeline-rail" aria-hidden="true"></div><div class="timeline-content"><a href="#/exhibition/' + ex.id + '"><strong>' + esc(ex.title) + '</strong></a>' +
+      '<p class="plan-item__meta">' + ex.duration + '분 · ' + esc(priceLabel(ex)) + (isClosed(ex) ? ' · 종료됨' : '') + '</p>' +
+      (ex.booking === '필수' ? '<div class="reservation-notice"><strong>예약 필수</strong><p>예약한 시간에 맞춰 일정을 조정해 주세요. 위 시각은 예상값이에요.</p></div>' : '') +
+      (visit ? '<div class="visit-actions">' + visit + '</div>' : '') + '</div></div>' +
+      '<div class="timeline-actions">' +
+      '<button class="btn btn--outline btn--compact" data-action="move-plan" data-id="' + ex.id + '" data-direction="-1" aria-label="' + esc(ex.title) + ' 위로"' + (i === 0 ? ' disabled' : '') + '>위로</button>' +
+      '<button class="btn btn--outline btn--compact" data-action="move-plan" data-id="' + ex.id + '" data-direction="1" aria-label="' + esc(ex.title) + ' 아래로"' + (i === rows.length - 1 ? ' disabled' : '') + '>아래로</button>' +
+      '<button class="btn btn--outline btn--compact" data-action="assign" data-id="' + ex.id + '" data-day="' + other + '"' + (isClosed(ex) ? ' disabled' : '') + '>' + otherLabel + '</button>' +
+      '<button class="btn btn--outline btn--compact" data-action="unplan" data-id="' + ex.id + '">빼기</button></div></li>';
   }).join('');
-
-  const parts = minutesParts(total);
-  const totalHTML = parts.h === null
-    ? '<span class="day-slot__total-num">' + parts.m + '</span><span class="day-slot__total-unit">분</span>'
-    : '<span class="day-slot__total-num">' + parts.h + '</span><span class="day-slot__total-unit">시간</span>' +
-      (parts.m ? '<span class="day-slot__total-num">' + parts.m + '</span><span class="day-slot__total-unit">분</span>' : '');
-
-  return '<div class="day-slot' + (over ? ' day-slot--over' : '') + '">' +
-    '<div class="day-slot__head"><span class="day-slot__day">' + dayLabel + '</span>' +
-      '<time class="day-slot__date" datetime="' + dateISO + '">' + shortDate(dateISO) + '</time></div>' +
-    (ids.length
-      ? '<ul class="day-slot__items">' + items + '</ul>'
-      : '<p class="day-slot__empty">이 날은 아직 비어 있어요</p>') +
-    (ids.length
-      ? '<div class="day-slot__total"><span class="day-slot__total-label">관람 합계</span>' + totalHTML + '</div>' +
-        '<p class="day-slot__note">이동 시간은 따로 봐야 해요.</p>' +
-        (over ? '<p class="day-slot__warning" aria-live="polite">' +
-          '<i class="fa-solid fa-circle-info" aria-hidden="true"></i>' +
-          '<span>반나절 넘어요. 하나는 다음 주로 미뤄도 돼요</span></p>' : '')
-      : '') +
-    '</div>';
+  return '<div class="day-slot' + (totals.total > PLAN_LIMIT_MIN ? ' day-slot--over' : '') + '"><div class="day-slot__head"><span class="day-slot__day">' + dayLabel + '</span><time class="day-slot__date" datetime="' + dateISO + '">' + shortDate(dateISO) + '</time></div>' +
+    (rows.length ? '<div class="start-time"><label for="start-' + day + '">첫 일정 시작<small>직접 선택 · 10:00~15:00 (30분 단위)</small></label><select id="start-' + day + '" data-action="start-time" data-day="' + day + '">' + options + '</select></div><ol class="day-slot__items">' + items + '</ol>' +
+      '<div class="timeline-summary"><p>전체 소요</p><strong class="timeline-total">' + totalHTML + '</strong><p class="day-slot__note">관람 ' + minutesLabel(totals.view) + ' · 이동 ' + totals.travel + '분</p>' +
+      '<div class="timeline-end"><strong>' + state.dayStartTime[day] + ' 시작 → ' + clockLabel(totals.end) + ' 종료 예상</strong><small>전체 소요 = 관람 합계 + 이동 합계</small></div></div>' +
+      (totals.total > PLAN_LIMIT_MIN ? '<p class="day-slot__warning">반나절을 넘는 일정이에요. 순서를 바꾸거나 한 곳을 덜어보세요.</p>' : '')
+      : '<p class="day-slot__empty">이 날은 아직 비어 있어요</p><a class="btn btn--outline" href="#/saved">저장한 전시에서 추가</a>') + '</div>';
 }
 
 /* ============ 화면: 지역별 모아보기 ============ */
@@ -860,6 +820,39 @@ document.addEventListener('click', function (e) {
       break;
     }
 
+    case 'demo-date':
+      if (setCurrentDate(target.dataset.value)) { ui.draft = null; render(); showToast('데모 날짜를 바꿨어요'); }
+      break;
+    case 'move-plan':
+      if (movePlan(target.dataset.id, Number(target.dataset.direction))) {
+        render();
+        const button = app.querySelector('[data-action="move-plan"][data-id="' + target.dataset.id + '"][data-direction="' + target.dataset.direction + '"]');
+        if (button && !button.disabled) button.focus();
+        showToast('순서와 예상 시각을 바꿨어요');
+      }
+      break;
+    case 'visit':
+      if (markVisited(target.dataset.id)) { render(); showToast('다녀온 전시로 기록했어요'); }
+      break;
+    case 'cancel-edit': {
+      const id = ui.draft && ui.draft.editId;
+      if (id) openConfirm('수정을 취소할까요?', '변경한 내용은 저장되지 않아요.', '계속 수정', '수정 취소', function () { ui.draft = null; location.hash = '#/review/' + id; });
+      break;
+    }
+    case 'delete-review': {
+      const review = getReview(target.dataset.id);
+      if (!review || !review.mine) return;
+      openConfirm('후기를 삭제할까요?', '후기를 지워도 다녀온 기록은 남아 있어요.', '취소', '삭제', function () {
+        const snapshot = deleteReview(review.id);
+        if (!snapshot) return;
+        location.hash = '#/reviews';
+        showToast('후기를 삭제했어요', '되돌리기', function () {
+          if (restoreReview(snapshot)) { hideToast(); location.hash = '#/review/' + review.id; }
+          else showToast('이미 이 전시에 남긴 후기가 있어요.');
+        });
+      });
+      break;
+    }
     case 'toast-action':
       e.preventDefault();
       if (typeof ui.toastHandler === 'function') { const h = ui.toastHandler; ui.toastHandler = null; h(); }
@@ -992,17 +985,13 @@ document.addEventListener('click', function (e) {
       if (target.disabled || target.dataset.busy === '1') return;
       target.dataset.busy = '1';
       const d = ui.draft;
-      addReview({
-        id: 'rv-my-' + (state.reviews.length + 1) + '-' + d.exId,
-        exhibitionId: d.exId,
-        rating: d.rating,
-        text: d.text.trim(),
-        day: d.day || '토요일',
-        waiting: d.waiting === 'yes',
-        order: state.reviews.length + 1
-      });
-      d.done = true;
-      render();
+      const values = { exhibitionId: d.exId, rating: d.rating, text: d.text, day: d.day, waiting: d.waiting === 'yes' };
+      if (!d.day || d.waiting === null) { target.dataset.busy = ''; return; }
+      const result = d.editId ? (updateReview(d.editId, values) && getReview(d.editId)) : addReview(values);
+      if (!result) { target.dataset.busy = ''; showToast('내용과 전시 상태를 다시 확인해 주세요.'); return; }
+      ui.draft = null;
+      location.hash = '#/review/' + result.id;
+      showToast(d.editId ? '후기를 수정했어요' : '후기와 방문 기록을 저장했어요');
       break;
     }
 
@@ -1022,6 +1011,14 @@ document.addEventListener('click', function (e) {
     case 'modal-scrim':
       if (e.target === target) closeModal();
       break;
+  }
+});
+
+document.addEventListener('change', function (e) {
+  if (e.target.dataset.action === 'start-time' && setDayStartTime(e.target.dataset.day, e.target.value)) {
+    const day = e.target.dataset.day; render();
+    const select = document.getElementById('start-' + day); if (select) select.focus();
+    showToast('시작과 종료 예상 시각을 바꿨어요');
   }
 });
 
@@ -1073,7 +1070,7 @@ function updateCounter() {
     textarea.classList.toggle('form-textarea--error', over);
     if (over) textarea.setAttribute('aria-invalid', 'true'); else textarea.removeAttribute('aria-invalid');
   }
-  const canSubmit = d.rating >= 1 && d.text.trim().length > 0 && !over;
+  const canSubmit = d.rating >= 1 && d.text.trim().length > 0 && !over && d.day && d.waiting !== null;
   if (submit) submit.disabled = !canSubmit;
   if (note) note.style.display = canSubmit ? 'none' : '';
 }

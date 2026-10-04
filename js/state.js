@@ -5,7 +5,11 @@ const KEYS = {
   saved: 'weeklypick.saved',
   plan: 'weeklypick.plan',
   reviews: 'weeklypick.reviews',
-  recent: 'weeklypick.recent'
+  recent: 'weeklypick.recent',
+  visits: 'weeklypick.visits',
+  dayStartTime: 'weeklypick.dayStartTime',
+  currentDate: 'weeklypick.currentDate',
+  nextReviewSeq: 'weeklypick.nextReviewSeq'
 };
 const STORE_VERSION = 1;
 
@@ -21,6 +25,10 @@ const state = {
   plan: { sat: [], sun: [] },
   reviews: [],
   recent: [],
+  visits: {},
+  dayStartTime: { sat: '11:00', sun: '11:00' },
+  currentDate: ISSUE_DATE,
+  nextReviewSeq: 1,
   recovered: false
 };
 
@@ -62,7 +70,7 @@ function clone(value) {
 
 function validateIdList(data) {
   if (!Array.isArray(data)) return null;
-  return data.filter(function (id) { return typeof id === 'string' && validIds.has(id); });
+  return Array.from(new Set(data.filter(function (id) { return typeof id === 'string' && validIds.has(id); })));
 }
 
 function validatePlan(data) {
@@ -79,8 +87,7 @@ function validateReviews(data) {
   if (!Array.isArray(data)) return null;
   return data.filter(function (r) {
     return r && typeof r.id === 'string' && validIds.has(r.exhibitionId) &&
-      typeof r.rating === 'number' && r.rating >= 1 && r.rating <= 5 &&
-      typeof r.text === 'string' && r.text.length > 0 && r.text.length <= 80;
+      validReviewInput(r);
   });
 }
 
@@ -90,10 +97,34 @@ function loadState() {
   state.plan = readKey('plan', DEFAULTS.plan, validatePlan);
   state.reviews = readKey('reviews', DEFAULTS.reviews, validateReviews);
   state.recent = readKey('recent', DEFAULTS.recent, validateIdList);
+  state.currentDate = readKey('currentDate', ISSUE_DATE, function (d) { return DEMO_DATES.includes(d) ? d : null; });
+  state.dayStartTime = readKey('dayStartTime', { sat: '11:00', sun: '11:00' }, function (d) {
+    return d && validStartTime(d.sat) && validStartTime(d.sun) ? { sat: d.sat, sun: d.sun } : null;
+  });
+  state.visits = readKey('visits', {}, function (d) {
+    if (!d || typeof d !== 'object' || Array.isArray(d)) return null;
+    return Object.fromEntries(Object.entries(d).filter(function (p) {
+      return validIds.has(p[0]) && /^\d{4}-\d{2}-\d{2}$/.test(p[1]);
+    }));
+  });
+  state.nextReviewSeq = readKey('nextReviewSeq', 1, function (n) { return Number.isSafeInteger(n) && n > 0 ? n : null; });
+  // V1 식별자를 한 번만 마이그레이션. 기존 V2 식별자는 재시작해도 유지한다.
+  const used = new Set();
+  state.reviews.forEach(function (r) {
+    if (/^rv-my-\d+$/.test(r.id)) state.nextReviewSeq = Math.max(state.nextReviewSeq, Number(r.id.slice(6)) + 1);
+  });
+  state.reviews.slice().reverse().forEach(function (r) {
+    if (!/^rv-my-\d+$/.test(r.id) || used.has(r.id)) r.id = 'rv-my-' + state.nextReviewSeq++;
+    used.add(r.id);
+    r.order = Number(r.id.slice(6));
+    r.createdAt = r.createdAt || ISSUE_DATE;
+    if (!state.visits[r.exhibitionId]) state.visits[r.exhibitionId] = r.createdAt;
+  });
   // 계획에 있는데 저장에 없으면 저장에 되살린다 (정합성)
   allPlanned().forEach(function (id) {
     if (state.saved.indexOf(id) === -1) state.saved.push(id);
   });
+  ['saved', 'plan', 'reviews', 'visits', 'nextReviewSeq'].forEach(persist);
 }
 
 function persist(key) {
@@ -105,6 +136,7 @@ function persist(key) {
 function isSaved(id) { return state.saved.indexOf(id) !== -1; }
 
 function addSaved(id) {
+  if (!validIds.has(id) || isClosed(getExhibition(id))) return false;
   if (isSaved(id)) return false;
   state.saved.unshift(id);
   persist('saved');
@@ -124,8 +156,12 @@ function removeSaved(id) {
 }
 
 function restoreSaved(id, snapshot) {
+  if (!snapshot || !validIds.has(id)) return;
   if (!isSaved(id)) state.saved.splice(snapshot.index, 0, id);
-  state.plan = snapshot.plan;
+  if (!plannedDay(id)) ['sat', 'sun'].forEach(function (day) {
+    const index = snapshot.plan[day].indexOf(id);
+    if (index !== -1) state.plan[day].splice(index, 0, id);
+  });
   persist('saved');
   persist('plan');
 }
@@ -143,9 +179,10 @@ function plannedDay(id) {
 }
 
 function assignToDay(id, day) {
-  if (!validIds.has(id)) return false;
+  if (!validIds.has(id) || !['sat', 'sun'].includes(day)) return false;
   const ex = getExhibition(id);
   if (isClosed(ex)) return false;
+  if (plannedDay(id) === day) return true;
   addSaved(id);
   state.plan.sat = state.plan.sat.filter(function (x) { return x !== id; });
   state.plan.sun = state.plan.sun.filter(function (x) { return x !== id; });
@@ -165,15 +202,16 @@ function removeFromPlan(id) {
 }
 
 function restoreToPlan(id, snapshot) {
+  if (!snapshot || !validIds.has(id) || plannedDay(id)) return false;
+  if (!isSaved(id)) state.saved.push(id);
   state.plan[snapshot.day].splice(snapshot.index, 0, id);
+  persist('saved');
   persist('plan');
+  return true;
 }
 
 function dayTotalMinutes(day) {
-  return state.plan[day].reduce(function (sum, id) {
-    const ex = getExhibition(id);
-    return sum + (ex ? ex.duration : 0);
-  }, 0);
+  return calculateTotalDuration(day).total;
 }
 
 function isOverLimit(day) {
@@ -191,8 +229,15 @@ function pushRecent(id) {
 /* ---------- 후기 ---------- */
 
 function addReview(review) {
-  state.reviews.unshift(review);
+  if (!canWriteReview(getExhibition(review.exhibitionId)) || !validReviewInput(review)) return null;
+  if (myReviewOf(review.exhibitionId)) return null;
+  const seq = state.nextReviewSeq++;
+  const saved = Object.assign({}, review, { id: 'rv-my-' + seq, order: seq, text: review.text.trim(), createdAt: state.currentDate });
+  state.reviews.unshift(saved);
+  persist('nextReviewSeq');
+  markVisited(review.exhibitionId);
   persist('reviews');
+  return saved;
 }
 
 function allReviews() {
@@ -253,15 +298,15 @@ function dayDiff(fromISO, toISO) {
 }
 
 function isClosed(ex) {
-  return dayDiff(TODAY, ex.end) < 0;
+  return getRuntimeStatus(ex) === 'ended';
 }
 
 function daysLeft(ex) {
-  return dayDiff(TODAY, ex.end);
+  return getDaysUntilEnd(ex);
 }
 
 function isEndingSoon(ex) {
-  const d = daysLeft(ex);
+  const d = dayDiff(ISSUE_DATE, ex.end);
   return d >= 0 && d <= ENDING_SOON_DAYS;
 }
 
@@ -360,9 +405,8 @@ function filterExhibitions(query) {
 /* ---------- 기사 파생 ---------- */
 
 function articleStops(article) {
-  return article.stops.map(function (s) {
-    return { time: s.time, ex: getExhibition(s.exhibitionId) };
-  }).filter(function (s) { return s.ex; });
+  return timelineForIds(article.stops.map(function (s) { return s.exhibitionId; }), article.stops[0].time)
+    .map(function (s) { return { time: clockLabel(s.start), ex: s.ex }; });
 }
 
 function articleViewMinutes(article) {
@@ -392,4 +436,91 @@ function minutesParts(min) {
   // Anton 숫자와 Pretendard 단위를 분리한다 (규정 4.3)
   if (min < 60) return { h: null, m: min };
   return { h: Math.floor(min / 60), m: min % 60 };
+}
+
+/* ---------- V2: 시간·방문·후기 ---------- */
+function getRuntimeStatus(ex) {
+  if (!ex) return null;
+  if (state.currentDate > ex.end) return 'ended';
+  return state.currentDate < ex.start ? 'upcoming' : 'active';
+}
+function getDaysUntilEnd(ex) { return dayDiff(state.currentDate, ex.end); }
+function isIssueEndingSoon(ex) { return isEndingSoon(ex); }
+function canMarkVisited(ex) { return !!ex && getRuntimeStatus(ex) !== 'upcoming'; }
+function canWriteReview(ex) { return canMarkVisited(ex); }
+function setCurrentDate(date) {
+  if (!DEMO_DATES.includes(date)) return false;
+  state.currentDate = date; persist('currentDate'); return true;
+}
+function weekendLabel() {
+  return (state.currentDate > WEEKEND_SUN ? '지난 주말' : '이번 주말') + ' 9.12 토 – 9.13 일';
+}
+function validStartTime(time) { return /^(10|11|12|13|14):(00|30)$|^15:00$/.test(time); }
+function setDayStartTime(day, time) {
+  if (!['sat', 'sun'].includes(day) || !validStartTime(time)) return false;
+  state.dayStartTime[day] = time; persist('dayStartTime'); return true;
+}
+function getTravelMinutes(a, b) {
+  const pair = TRAVEL_PAIRS.find(function (p) { return (p[0] === a && p[1] === b) || (p[0] === b && p[1] === a); });
+  if (!pair) throw new Error('알 수 없는 권역 이동');
+  return pair[2];
+}
+function clockMinutes(time) { const p = time.split(':').map(Number); return p[0] * 60 + p[1]; }
+function clockLabel(minutes) { return String(Math.floor(minutes / 60)).padStart(2, '0') + ':' + String(minutes % 60).padStart(2, '0'); }
+function timelineForIds(ids, startTime) {
+  let cursor = clockMinutes(startTime);
+  let previous = null;
+  return ids.map(getExhibition).filter(Boolean).map(function (ex) {
+    const travel = previous ? getTravelMinutes(previous.regionId, ex.regionId) : 0;
+    cursor += travel;
+    const row = { ex: ex, start: cursor, end: cursor + ex.duration, travel: travel };
+    cursor = row.end; previous = ex; return row;
+  });
+}
+function calculateTimeline(day) { return timelineForIds(state.plan[day], state.dayStartTime[day]); }
+function calculateTotalDuration(day) {
+  const rows = calculateTimeline(day);
+  const view = rows.reduce(function (n, r) { return n + r.ex.duration; }, 0);
+  const travel = rows.reduce(function (n, r) { return n + r.travel; }, 0);
+  return { view: view, travel: travel, total: view + travel, end: rows.length ? rows[rows.length - 1].end : clockMinutes(state.dayStartTime[day]) };
+}
+function movePlan(id, direction) {
+  const day = plannedDay(id);
+  if (!day || ![-1, 1].includes(direction)) return false;
+  const list = state.plan[day], from = list.indexOf(id), to = from + direction;
+  if (to < 0 || to >= list.length) return false;
+  [list[from], list[to]] = [list[to], list[from]];
+  persist('plan'); return true;
+}
+function markVisited(id) {
+  if (!canMarkVisited(getExhibition(id))) return false;
+  if (!state.visits[id]) state.visits[id] = state.currentDate;
+  persist('visits'); return true;
+}
+function myReviewOf(id) { return state.reviews.find(function (r) { return r.exhibitionId === id; }) || null; }
+function validReviewInput(r) {
+  return r && Number.isInteger(r.rating) && r.rating >= 1 && r.rating <= 5 && typeof r.text === 'string' &&
+    r.text.trim().length > 0 && r.text.length <= 80 && ['토요일', '일요일', '평일'].includes(r.day) && typeof r.waiting === 'boolean';
+}
+function updateReview(id, changes) {
+  const r = state.reviews.find(function (r) { return r.id === id; });
+  if (!r || !canWriteReview(getExhibition(r.exhibitionId)) || !validReviewInput(changes)) return false;
+  Object.assign(r, { rating: changes.rating, text: changes.text.trim(), day: changes.day, waiting: changes.waiting });
+  persist('reviews'); return true;
+}
+function deleteReview(id) {
+  const index = state.reviews.findIndex(function (r) { return r.id === id; });
+  if (index < 0) return null;
+  const review = state.reviews.splice(index, 1)[0];
+  persist('reviews'); return { review: review, index: index };
+}
+function restoreReview(snapshot) {
+  if (!snapshot || state.reviews.some(function (r) { return r.id === snapshot.review.id || r.exhibitionId === snapshot.review.exhibitionId; })) return false;
+  state.reviews.splice(Math.min(snapshot.index, state.reviews.length), 0, snapshot.review);
+  state.visits[snapshot.review.exhibitionId] = state.visits[snapshot.review.exhibitionId] || snapshot.review.createdAt;
+  persist('reviews'); persist('visits'); return true;
+}
+function articleMoveMinutes(article) {
+  return timelineForIds(article.stops.map(function (s) { return s.exhibitionId; }), article.stops[0].time)
+    .reduce(function (n, s) { return n + s.travel; }, 0);
 }
