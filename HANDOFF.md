@@ -12,7 +12,7 @@
 - 저장 실패의 pending 데이터와 후기 초안은 사용자별 키로 분리한다. 로그아웃 시 게스트 기록을 복원한다.
 - 자동 검사: `npm test` (상태·초안·계정·실제 PostgreSQL 정책), `npm run test:browser` / `npm run test:webkit` (기존 데모), `npm run test:account` 및 `BROWSER=webkit npm run test:account` (실제 SDK + mock HTTP로 메일 요청/PKCE/가져오기/후기/실패 복구/로그아웃).
 - 테스트 Preview: https://weekly-pick-9fn0era5i-dbwowls12345-3437s-projects.vercel.app/#/account (Supabase Site URL도 같은 origin).
-- 실제 이메일 수신과 실계정 저장은 사용자 테스트가 아직 필요하다. SMTP를 갖추기 전에는 일반 공개용 운영 로그인으로 전환하지 않는다. 현재 운영은 기존 main을 유지하고 테스트는 Preview에서 진행한다.
+- 사용자가 실제 이메일 링크 로그인을 완료했다. 실계정에서 전시 ex-10을 저장하고 새 탭에서 서버 복원을 확인한 뒤 검증용 ex-10만 해제하여 기존 2곳/계획 1곳 상태로 복원했다. 실계정의 공개 후기는 임의로 게시하지 않았으며 후기 흐름은 SDK 브라우저 검사와 SQL 정책 테스트로 검증했다. SMTP를 갖추기 전에는 일반 공개용 운영 로그인으로 전환하지 않는다. 현재 운영은 기존 main을 유지하고 테스트는 Preview에서 진행한다.
 - SDK 갱신 시 `npm run build:auth`, `js/vendor/supabase.js`와 license 파일을 함께 커밋한다.
 
 ## 현재 상태
