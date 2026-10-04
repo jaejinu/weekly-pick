@@ -66,6 +66,7 @@ const server = http.createServer((req,res)=>{
  await require('./browser-review.cjs')(page, go, ready, shot);
  await require('./browser-drafts.cjs')(page, go, ready);
  await require('./browser-accessibility.cjs')(page, go, ready);
+ await require('./browser-discovery.cjs')(page, go, ready);
  await go('review/rv-01');await page.locator('.review-detail__text').waitFor();assert.equal(await page.locator('[data-action="delete-review"]').count(),0);
  for(const width of [360,390,430]){
   await page.setViewportSize({width,height:900});
