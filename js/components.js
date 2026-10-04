@@ -273,7 +273,7 @@ function stickyBarHTML(buttons, note) {
 
 /* ---------- 공통 고지 ---------- */
 function sampleNoteHTML(text) {
-  return '<p class="sample-note">' + esc(text || (typeof account!=='undefined' && account.enabled ? '전시·장소와 기본 후기는 가상 샘플이며, 회원이 작성한 후기도 함께 표시돼요.' : '위클리픽의 전시·장소·후기는 모두 가상의 샘플 콘텐츠입니다.')) + '</p>';
+  return '<p class="sample-note">' + esc(text || (typeof account!=='undefined' && account.enabled ? '전시·장소와 기본 후기는 가상 샘플이며, 회원이 작성한 후기도 함께 표시돼요.' : '위클리픽의 전시·장소·후기는 모두 가상의 샘플 콘텐츠입니다.')) + '</p><a class="privacy-link" href="#/privacy">개인정보 처리 안내</a>';
 }
 
 function sectionHeaderHTML(title, moreLabel, moreHref) {

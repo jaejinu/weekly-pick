@@ -9,7 +9,7 @@ const account = {
     const status=document.getElementById('account-status');
     if(status) status.innerHTML=this.enabled && ['boot','loading','saving','error','conflict'].includes(this.phase)
       ? '<div class="account-status"><span>'+esc(this.phase==='saving'?'계정에 저장 중…':this.phase==='loading'||this.phase==='boot'?'계정을 확인하고 있어요…':this.phase==='conflict'?'다른 기기에서 바뀐 내용이 있어요.':'계정 연결을 확인해 주세요.')+'</span><a href="#/account">확인</a></div>' : '';
-    if(typeof currentRoute!=='undefined' && currentRoute==='/account') render();
+    if(typeof currentRoute!=='undefined' && ['/account','/account/delete'].includes(currentRoute)) render();
   },
   clearPrivateUI: function(){
     saveReviewDraft(); ui.draft=null; hideToast(); if(ui.modalConfirm) closeModal();
@@ -45,7 +45,7 @@ const account = {
     if(!force && this.initialized && (this.user&&this.user.id)===(user&&user.id)) return;
     const generation=++this.generation;
     this.initialized=true; this.clearPrivateUI();
-    this.user=user||null; this.pending=null; this.message='';this.importDismissed=false;
+    this.user=user||null; this.pending=null; this.publicReviews=[]; this.message='';this.importDismissed=false;
     if(!user){applyAccountLibrary(this.guest||emptyAccountLibrary());this.phase='guest';render();this.refreshUI();await this.loadFeed();return;}
     applyAccountLibrary(emptyAccountLibrary()); this.phase='loading';render();this.refreshUI();
     try {
@@ -73,11 +73,11 @@ const account = {
     if(!this.client)return;
     const generation=this.generation;
     let result;
-    try { result=await this.client.from('member_reviews').select('id,user_id,exhibition_id,rating,body,day,waiting,created_at').eq('issue_id',ISSUE.id).order('created_at',{ascending:false}).limit(100); } catch(error) {result={error:error};}
+    try { result=await this.client.rpc('list_public_reviews',{p_issue:ISSUE.id}); } catch(error) {result={error:error};}
     if(generation!==this.generation)return;
     this.feedError=!!result.error;
     if(!result.error)this.publicReviews=(result.data||[]).filter(r=>validIds.has(r.exhibition_id)).map(r=>({
-      id:'member-'+r.id,authorId:r.user_id,exhibitionId:r.exhibition_id,rating:r.rating,text:r.body,day:r.day,waiting:r.waiting,createdAt:r.created_at.slice(0,10),order:Date.parse(r.created_at),mine:false,member:true
+      id:'member-'+r.id,isOwn:r.is_own===true,exhibitionId:r.exhibition_id,rating:r.rating,text:r.body,day:r.day,waiting:r.waiting,createdAt:r.created_at.slice(0,10),order:Date.parse(r.created_at),mine:false,member:true
     }));
     // Do not replace a form while the user is typing.
     if(!ui.draft)render();
@@ -126,20 +126,45 @@ const account = {
   },
   sendLink: async function(email){
     if(!this.client || this.mailSending || Date.now()<this.cooldownUntil)return;
+    if(!loginProtection.consent || (loginProtection.required()&&!loginProtection.token))return;
+    const captchaToken=loginProtection.token;
     this.email=email;this.mailSending=true;this.mailSent=false;this.message='';this.refreshUI();
     try{
-      const result=await this.client.auth.signInWithOtp({email:email,options:{emailRedirectTo:location.origin+'/',shouldCreateUser:true}});
+      const result=await this.client.auth.signInWithOtp({email:email,options:{emailRedirectTo:location.origin+'/',shouldCreateUser:true,captchaToken:captchaToken||undefined}});
       if(result.error)throw result.error;
       this.mailSent=true;this.cooldownUntil=Date.now()+60000;this.message='';
       setTimeout(()=>this.refreshUI(),60010);
-    }catch(error){this.message='메일을 보내지 못했어요. 주소를 확인하고 잠시 후 다시 시도해 주세요.';}
+    }catch(error){this.message=error.status===429?'요청이 많아 메일 발송을 잠시 쉬고 있어요. 잠시 후 다시 시도하거나 로그인 없이 둘러보세요.':'메일을 보내지 못했어요. 주소와 보안 확인을 확인하고 다시 시도해 주세요.';}
     this.mailSending=false;this.refreshUI();
   },
   signOut: async function(){
-    if(!this.client || this.phase==='saving')return;
+    if(!this.client || ['saving','deleting'].includes(this.phase))return;
     const result=await this.client.auth.signOut({scope:'local'});
     if(result.error){this.message='로그아웃하지 못했어요. 다시 시도해 주세요.';this.refreshUI();return;}
     await this.switchUser(null);
+  },
+  deleteAccount: async function(){
+    if(!this.client || !this.user || ['boot','loading','saving','deleting'].includes(this.phase))return;
+    const id=this.user.id, generation=this.generation;
+    this.phase='deleting';this.message='계정과 기록을 삭제하고 있어요…';this.refreshUI();
+    try {
+      const result=await this.client.rpc('delete_my_account',{p_confirmation:'DELETE MY ACCOUNT'});
+      if(result.error || result.data!==true)throw result.error||new Error('DELETE_FAILED');
+      if(generation!==this.generation)return;
+      ui.draft=null;reviewDraftStore.clearPrefix(id+'/');
+      try{localStorage.removeItem(this.pendingKey(id));}catch(error){/* storage may be unavailable */}
+      this.pending=null;this.publicReviews=[];this.email='';
+      // Deleted users can no longer refresh. Clear this browser's session even if
+      // the sign-out network request fails after the database transaction succeeds.
+      try{await this.client.auth.signOut({scope:'local'});}catch(error){/* local fallback below */}
+      try{for(const key of Object.keys(localStorage))if(key==='weeklypick.auth'||key.startsWith('weeklypick.auth-'))localStorage.removeItem(key);}catch(error){}
+      await this.switchUser(null,true);
+      this.message='탈퇴가 완료됐어요. 계정과 서버에 저장된 기록·후기를 삭제했어요.';
+      location.hash='#/account';this.refreshUI();
+    }catch(error){
+      if(generation!==this.generation)return;
+      this.phase='error';this.message='탈퇴 완료를 확인하지 못했어요. 연결을 확인하고 다시 시도해 주세요.';this.refreshUI();
+    }
   },
   importGuest: async function(){
     if(!this.allowMutation()||!this.guest)return;

@@ -250,7 +250,7 @@ function allReviews() {
   const sample = SAMPLE_REVIEWS.map(function (r) {
     return Object.assign({}, r, { mine: false });
   });
-  const members = typeof account !== 'undefined' && account.enabled ? account.publicReviews.filter(function (r) { return !account.user || r.authorId !== account.user.id; }) : [];
+  const members = typeof account !== 'undefined' && account.enabled ? account.publicReviews.filter(function (r) { return !r.isOwn; }) : [];
   return mine.concat(members, sample);
 }
 
