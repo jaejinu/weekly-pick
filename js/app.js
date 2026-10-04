@@ -455,6 +455,17 @@ function screenReviewDetail(id) {
 
 /* ============ 화면: 후기 작성 ============ */
 
+function reviewDraftValues(draft) {
+  return { rating: draft.rating, text: draft.text, day: draft.day, waiting: draft.waiting };
+}
+
+function hasReviewDraftChanges() {
+  if (!ui.draft) return false;
+  return Object.keys(ui.draft.initial).some(function (key) {
+    return ui.draft[key] !== ui.draft.initial[key];
+  });
+}
+
 function screenReviewWrite(exId, editId) {
   const ex = getExhibition(exId);
   if (!ex) {
@@ -470,7 +481,8 @@ function screenReviewWrite(exId, editId) {
   if (!ui.draft || ui.draft.exId !== exId || ui.draft.editId !== (editId || null)) {
     const original = editId ? getReview(editId) : null;
     ui.draft = { exId: exId, editId: editId || null, rating: original ? original.rating : 0, text: original ? original.text : '',
-      day: original ? original.day : '', waiting: original ? (original.waiting ? 'yes' : 'no') : null, done: false };
+      day: original ? original.day : '', waiting: original ? (original.waiting ? 'yes' : 'no') : null };
+    ui.draft.initial = reviewDraftValues(ui.draft);
   }
   const d = ui.draft;
 
@@ -495,7 +507,7 @@ function screenReviewWrite(exId, editId) {
   return detailHeaderHTML(editId ? '후기 수정' : '후기 남기기') +
     '<main class="content-container screen--with-bar">' +
       '<div class="detail-body">' +
-        '<h1 class="sr-only">' + esc(ex.title) + ' 후기 남기기</h1>' +
+        '<h1 class="sr-only">' + esc(ex.title) + (editId ? ' 후기 수정' : ' 후기 남기기') + '</h1>' +
         '<span class="review-card-label">' + (editId ? '내 후기 수정' : '이 전시를 다녀오셨나요?') + '</span>' +
         (editId ? '<p class="review-edit-banner">수정 중 · ' + esc(getReview(editId).createdAt) + ' 작성</p>' : '') +
         stopCardHTML(ex, null, venueAndPeriod(ex), { href: null }) +
@@ -744,16 +756,18 @@ function hideToast() {
 
 let modalReturnFocus = null;
 
-function openConfirm(title, desc, primaryLabel, secondaryLabel, onSecondary) {
-  modalReturnFocus = document.activeElement;
+function openConfirm(title, desc, primaryLabel, secondaryLabel, onSecondary, trigger) {
+  modalReturnFocus = trigger || document.activeElement;
   modalRoot.innerHTML = '<div class="modal-scrim" data-action="modal-scrim">' +
-    '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">' +
-      '<h2 id="modal-title">' + esc(title) + '</h2><p>' + esc(desc) + '</p>' +
+    '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-description">' +
+      '<h2 id="modal-title">' + esc(title) + '</h2><p id="modal-description">' + esc(desc) + '</p>' +
       '<div class="modal__actions">' +
         '<button type="button" class="btn btn--primary btn--full" data-action="modal-close">' + esc(primaryLabel) + '</button>' +
         '<button type="button" class="modal__text-action" data-action="modal-confirm">' + esc(secondaryLabel) + '</button>' +
       '</div></div></div>';
   ui.modalConfirm = onSecondary;
+  app.inert = true;
+  toastRegion.inert = true;
   const first = modalRoot.querySelector('.btn--primary');
   if (first) first.focus();
   document.addEventListener('keydown', modalKeydown);
@@ -763,7 +777,10 @@ function closeModal() {
   modalRoot.innerHTML = '';
   ui.modalConfirm = null;
   document.removeEventListener('keydown', modalKeydown);
+  app.inert = false;
+  toastRegion.inert = false;
   if (modalReturnFocus && document.contains(modalReturnFocus)) modalReturnFocus.focus();
+  modalReturnFocus = null;
 }
 
 function modalKeydown(e) {
@@ -787,10 +804,13 @@ document.addEventListener('click', function (e) {
   switch (action) {
     case 'back':
       e.preventDefault();
-      if (ui.draft && !ui.draft.done && (ui.draft.rating > 0 || ui.draft.text.length > 0)) {
-        openConfirm('쓰던 후기가 사라져요. 그만 쓸까요?',
-          '지금 나가면 별점과 한 줄이 저장되지 않아요.',
-          '계속 쓰기', '그만두기', function () { ui.draft = null; history.back(); });
+      if (hasReviewDraftChanges()) {
+        openConfirm(ui.draft.editId ? '수정을 그만둘까요?' : '쓰던 후기가 사라져요. 그만 쓸까요?',
+          '지금 나가면 변경한 별점·후기·방문 정보가 저장되지 않아요.',
+          ui.draft.editId ? '계속 수정' : '계속 쓰기', '그만두기', function () {
+            ui.draft = null;
+            if (history.length > 1) history.back(); else location.hash = '#/home';
+          }, target);
         return;
       }
       if (history.length > 1) history.back(); else location.hash = '#/home';
@@ -836,7 +856,10 @@ document.addEventListener('click', function (e) {
       break;
     case 'cancel-edit': {
       const id = ui.draft && ui.draft.editId;
-      if (id) openConfirm('수정을 취소할까요?', '변경한 내용은 저장되지 않아요.', '계속 수정', '수정 취소', function () { ui.draft = null; location.hash = '#/review/' + id; });
+      if (!id) break;
+      const cancel = function () { ui.draft = null; location.hash = '#/review/' + id; };
+      if (hasReviewDraftChanges()) openConfirm('수정을 취소할까요?', '변경한 내용은 저장되지 않아요.', '계속 수정', '수정 취소', cancel, target);
+      else cancel();
       break;
     }
     case 'delete-review': {
@@ -850,7 +873,7 @@ document.addEventListener('click', function (e) {
           if (restoreReview(snapshot)) { hideToast(); location.hash = '#/review/' + review.id; }
           else showToast('이미 이 전시에 남긴 후기가 있어요.');
         });
-      });
+      }, target);
       break;
     }
     case 'toast-action':

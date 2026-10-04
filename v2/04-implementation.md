@@ -59,3 +59,12 @@ TEST_BASE_URL=https://your-preview.vercel.app npm run test:browser
 - 운영 주소는 비로그인 요청에서 HTTP 200을 반환한다.
 - 운영 주소에서 Chromium 핵심 동선·10개 경로·360/390/430px 검증 통과.
 - 검증은 독립 브라우저의 localStorage에서 수행하여 사용자의 기존 저장 데이터에 영향을 주지 않는다.
+
+## Git 통합 및 후속 UX 점검 (2026-10-05)
+
+- [PR #1](https://github.com/jaejinu/weekly-pick/pull/1)으로 main 병합 및 자동 배포 완료. 상태 테스트와 Chromium·WebKit CI가 PR/main에서 통과했다.
+- 초기 수정값을 기준으로 별점·후기·방문 요일·웨이팅의 변경 여부를 비교한다. 변경하지 않거나 원래 값으로 되돌린 수정 화면은 앱 내 뒤로가기/취소 시 불필요한 확인창을 띄우지 않는다.
+- 요일이나 웨이팅만 선택한 새 후기도 버리기 전에 확인한다. 계속 작성하면 현재 입력을 유지하며, 수정 취소를 확정해도 저장된 원문은 유지한다.
+- 확인창에 설명을 연결하고 배경을 inert 처리한다. Tab/Shift+Tab 순환, Escape 닫기, 호출 버튼으로 포커스 복귀를 검사한다. WebKit에서 클릭한 버튼이 activeElement가 아닐 수 있어 호출 버튼을 직접 전달한다.
+- `tests/browser-review.cjs`가 위 시나리오를 두 브라우저 공통 검사에 추가한다.
+- 브라우저 자체 뒤로가기·새로고침의 미저장 입력 보호와 실제 iPhone 검증은 이번 보완에 포함하지 않는다.
