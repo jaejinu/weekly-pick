@@ -28,7 +28,8 @@ function parseHash() {
   const query = {};
   (queryStr || '').split('&').filter(Boolean).forEach(function (pair) {
     const kv = pair.split('=');
-    query[kv[0]] = decodeURIComponent(kv[1] || '');
+    try { query[kv[0]] = decodeURIComponent(kv[1] || ''); }
+    catch (error) { query[kv[0]] = ''; }
   });
   return { parts: parts, query: query, raw: raw };
 }
@@ -36,6 +37,7 @@ function parseHash() {
 function render() {
   saveReviewDraft();
   const r = parseHash();
+  if (currentRoute !== r.raw && ui.modalConfirm) closeModal();
   const name = r.parts[0] || 'home';
   const id = r.parts[1];
   if (!(name === 'review' && ['new', 'edit'].includes(id))) ui.draft = null;
@@ -509,7 +511,7 @@ function screenReviewWrite(exId, editId) {
   for (let i = 1; i <= 5; i++) {
     stars += '<button type="button" class="rating-input__star' + (i <= d.rating ? ' is-on' : '') +
       '" role="radio" aria-checked="' + (i === d.rating) + '" data-action="set-rating" data-value="' + i +
-      '" aria-label="' + i + '점"><i class="fa-' + (i <= d.rating ? 'solid' : 'regular') +
+      '" tabindex="' + (i === (d.rating || 1) ? '0' : '-1') + '" aria-label="' + i + '점"><i class="fa-' + (i <= d.rating ? 'solid' : 'regular') +
       ' fa-star" aria-hidden="true"></i></button>';
   }
 
@@ -538,7 +540,7 @@ function screenReviewWrite(exId, editId) {
         '<label class="form-block__label" for="review-text">한 줄로 남겨 주세요</label>' +
         '<textarea id="review-text" class="form-textarea' + (over ? ' form-textarea--error' : '') +
           '" data-action="review-text" placeholder="40분이면 충분했어요, 오전이 한산해요"' +
-          (over ? ' aria-invalid="true" aria-describedby="text-error"' : '') + '>' + esc(d.text) + '</textarea>' +
+          ' aria-describedby="text-error"' + (over ? ' aria-invalid="true"' : '') + '>' + esc(d.text) + '</textarea>' +
         '<div class="form-counter">' +
           '<span id="text-error" class="form-counter__error" aria-live="polite">' +
             (over ? '한 줄은 80자까지 쓸 수 있어요. 지금 ' + d.text.length + '자예요.' : '') + '</span>' +
@@ -1009,16 +1011,19 @@ document.addEventListener('click', function (e) {
     case 'set-rating':
       ui.draft.rating = Number(target.dataset.value);
       render();
+      focusReviewChoice(target.dataset.action, target.dataset.value);
       break;
 
     case 'set-day':
       ui.draft.day = ui.draft.day === target.dataset.value ? '' : target.dataset.value;
       render();
+      focusReviewChoice(target.dataset.action, target.dataset.value);
       break;
 
     case 'set-waiting':
       ui.draft.waiting = ui.draft.waiting === target.dataset.value ? null : target.dataset.value;
       render();
+      focusReviewChoice(target.dataset.action, target.dataset.value);
       break;
 
     case 'submit-review': {
@@ -1119,19 +1124,24 @@ function updateCounter() {
   if (note) note.style.display = canSubmit ? 'none' : '';
 }
 
-/* 별점 키보드 조작 */
+function focusReviewChoice(action, value) {
+  const control = Array.from(app.querySelectorAll('[data-action]')).find(function (el) {
+    return el.dataset.action === action && el.dataset.value === String(value);
+  });
+  if (control) control.focus({ preventScroll: true });
+}
+
+/* 별점 키보드 조작: 한 번의 Tab 진입, 방향키로 순환 */
 document.addEventListener('keydown', function (e) {
-  if (['ArrowLeft', 'ArrowRight'].indexOf(e.key) === -1) return;
+  if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
   const star = e.target.closest('.rating-input__star');
   if (!star) return;
   e.preventDefault();
-  const next = e.key === 'ArrowRight'
-    ? Math.min(5, ui.draft.rating + 1)
-    : Math.max(1, ui.draft.rating - 1);
+  const direction = ['ArrowRight', 'ArrowDown'].includes(e.key) ? 1 : -1;
+  const next = (Number(star.dataset.value) - 1 + direction + 5) % 5 + 1;
   ui.draft.rating = next;
   render();
-  const stars = document.querySelectorAll('.rating-input__star');
-  if (stars[next - 1]) stars[next - 1].focus();
+  focusReviewChoice('set-rating', next);
 });
 
 /* ============ 시작 ============ */
