@@ -41,11 +41,13 @@ function mergeGuestLibrary(remote, guest) {
   });
   return result;
 }
-function sameAccountLibrary(a,b) {
+function accountLibraryFingerprint(value) {
   function canonical(value) {
     if(Array.isArray(value)) return value.map(canonical);
     if(value && typeof value==='object') return Object.fromEntries(Object.keys(value).sort().map(function(k){return [k,canonical(value[k])];}));
     return value;
   }
-  return JSON.stringify(canonical(a))===JSON.stringify(canonical(b));
+  return JSON.stringify(canonical(value));
 }
+
+function sameAccountLibrary(a,b) { return accountLibraryFingerprint(a)===accountLibraryFingerprint(b); }
