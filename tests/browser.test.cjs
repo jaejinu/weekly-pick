@@ -64,6 +64,7 @@ const server = http.createServer((req,res)=>{
  await page.locator('[data-action="toast-action"]').click();await page.waitForURL(/#\/review\/rv-my-1$/);await ready();
  assert.equal(await page.locator('.review-detail__text').innerText(),'수정한 후기');
  await require('./browser-review.cjs')(page, go, ready, shot);
+ await require('./browser-drafts.cjs')(page, go, ready);
  await go('review/rv-01');await page.locator('.review-detail__text').waitFor();assert.equal(await page.locator('[data-action="delete-review"]').count(),0);
  for(const width of [360,390,430]){
   await page.setViewportSize({width,height:900});
@@ -77,7 +78,7 @@ const server = http.createServer((req,res)=>{
  await page.evaluate(()=>{state.saved=[];state.plan={sat:[],sun:[]};persist('saved');persist('plan');});
  await go('saved');assert.match(await page.locator('.empty-state').innerText(),/마음에 드는/);await shot('saved-empty');
  assert.deepEqual(errors,[]);
- console.log('PASS: timeline, date states, persistence, review create/edit/delete/undo, sample protection, draft exit and modal keyboard access, empty states, and 10 routes at 360/390/430px.');
+ console.log('PASS: timeline, date states, persistence, review create/edit/delete/undo, sample protection, draft recovery/exit and modal keyboard access, empty states, and 10 routes at 360/390/430px.');
  console.log('Browser:',engine,'Target:',base,'Screenshots:',artifacts);
  } finally {await browser.close();server.close();}
 })().catch(e=>{console.error(e);server.close();process.exitCode=1;});
