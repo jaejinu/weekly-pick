@@ -12,3 +12,6 @@ node_modules/
 # V2 작업 산출물
 v2/*.zip
 .env*
+
+# Local working notes
+.local-notes/

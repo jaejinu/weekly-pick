@@ -4,7 +4,7 @@
 
 ## 디자인 기준
 
-[Figma UX 검토 내역](https://www.figma.com/design/yLwb9DYMBoP0xneugWaaJd?node-id=189-2130)을 기준으로 내 주말, 후기 수정·관리, 상세 액션, 빈 상태를 반영했다. 공용 카드·버튼·이미지·Font Awesome 아이콘과 기존 토큰을 재사용한다. 기존 UI 폰트 Pretendard는 유지한다(Figma에서는 대체 폰트 Gothic A1 사용). 홈·기사 전체의 픽셀 단위 재제작은 이번 변경에 포함하지 않는다.
+Figma UX 검토 내역을 기준으로 내 주말, 후기 수정·관리, 상세 액션, 빈 상태를 반영했다. 공용 카드·버튼·이미지·Font Awesome 아이콘과 기존 토큰을 재사용한다. 기존 UI 폰트 Pretendard는 유지한다(Figma에서는 대체 폰트 Gothic A1 사용). 홈·기사 전체의 픽셀 단위 재제작은 이번 변경에 포함하지 않는다.
 
 ## 구현
 
@@ -32,9 +32,6 @@
 
 ## 미리보기 배포 검증 (2026-10-05)
 
-- 미리보기: [https://weekly-pick-iq8qxx8aq-dbwowls12345-3437s-projects.vercel.app](https://weekly-pick-iq8qxx8aq-dbwowls12345-3437s-projects.vercel.app)
-- 배포 ID: `dpl_8d9PUAZzEwdz9FjrjCkuFhTEhgsr` · Vercel `READY` · Preview 환경
-- 프로젝트의 기존 Vercel 로그인 보호가 적용된다. 소유자 계정으로 로그인하여 확인한다.
 - 로컬 WebKit: 주요 기능 및 10개 경로 × 360/390/430px 검증 통과. 실제 기기 Safari 검증과는 구분한다.
 - 배포본 Chromium: 인증된 테스트 세션으로 같은 시나리오를 검증하여 통과.
 - 배포 JS 4개·CSS 3개·이미지 10개: 모두 HTTP 200, 로컬 파일과 바이트 일치.
@@ -54,8 +51,6 @@ TEST_BASE_URL=https://your-preview.vercel.app npm run test:browser
 ## 프로덕션 반영 (2026-10-05)
 
 - 운영 주소: https://weekly-pick.vercel.app
-- 배포 ID: `dpl_C6ypJDqppui6eu1xWgBZvjHaHu5s` · Production · Ready
-- 검증된 Preview `dpl_8d9PUAZzEwdz9FjrjCkuFhTEhgsr`를 `vercel promote`로 승격했다.
 - 운영 주소는 비로그인 요청에서 HTTP 200을 반환한다.
 - 운영 주소에서 Chromium 핵심 동선·10개 경로·360/390/430px 검증 통과.
 - 검증은 독립 브라우저의 localStorage에서 수행하여 사용자의 기존 저장 데이터에 영향을 주지 않는다.
