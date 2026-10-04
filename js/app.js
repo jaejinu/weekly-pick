@@ -18,6 +18,7 @@ const ui = {
 
 const reviewDraftStore = createReviewDraftStore(function () { return sessionStorage; });
 let currentRoute = null;
+let searchComposing = false;
 
 /* ============ 라우팅 ============ */
 
@@ -37,7 +38,11 @@ function parseHash() {
 function render() {
   saveReviewDraft();
   const r = parseHash();
-  if (currentRoute !== r.raw && ui.modalConfirm) closeModal();
+  const routeChanged = currentRoute !== r.raw;
+  if (routeChanged) {
+    searchComposing = false;
+    if (ui.modalConfirm) closeModal();
+  }
   const name = r.parts[0] || 'home';
   const id = r.parts[1];
   if (!(name === 'review' && ['new', 'edit'].includes(id))) ui.draft = null;
@@ -61,7 +66,7 @@ function render() {
       break;
     case 'saved':     html = screenSaved(); activeTab = 'saved'; break;
     case 'my':        html = screenMy(); activeTab = 'my'; break;
-    case 'regions':   html = screenRegions(r.query); break;
+    case 'regions':   html = screenRegions(r.query, routeChanged); break;
     case 'archive':   html = screenArchive(); break;
     default:
       location.replace('#/home');
@@ -81,7 +86,7 @@ function render() {
   const remembered = ui.scrollMemory[r.raw];
   window.scrollTo(0, typeof remembered === 'number' ? remembered : 0);
 
-  if (r.query.focus === '1') {
+  if (routeChanged && r.query.focus === '1') {
     const input = document.getElementById('search-input');
     if (input) { input.focus(); ui.discover.searchFocused = true; }
   }
@@ -694,8 +699,8 @@ function daySlotHTML(day, dayLabel, dateISO) {
 
 /* ============ 화면: 지역별 모아보기 ============ */
 
-function screenRegions(query) {
-  if (query.rg && getRegion(query.rg)) ui.regionTab = query.rg;
+function screenRegions(query, routeChanged) {
+  if (routeChanged && query.rg && getRegion(query.rg)) ui.regionTab = query.rg;
   const region = getRegion(ui.regionTab);
   const list = exhibitionsByRegion(region.id);
 
@@ -867,7 +872,8 @@ document.addEventListener('click', function (e) {
       if (movePlan(target.dataset.id, Number(target.dataset.direction))) {
         render();
         const button = app.querySelector('[data-action="move-plan"][data-id="' + target.dataset.id + '"][data-direction="' + target.dataset.direction + '"]');
-        if (button && !button.disabled) button.focus();
+        const next = button && !button.disabled ? button : app.querySelector('[data-action="move-plan"][data-id="' + target.dataset.id + '"][data-direction="' + (-Number(target.dataset.direction)) + '"]');
+        if (next && !next.disabled) next.focus({ preventScroll: true });
         showToast('순서와 예상 시각을 바꿨어요');
       }
       break;
@@ -905,6 +911,7 @@ document.addEventListener('click', function (e) {
       ui.discover.regionId = target.dataset.value;
       ui.discover.lastChip = target.dataset.value ? getRegion(target.dataset.value).name : null;
       render();
+      focusChoice(target.dataset.action, target.dataset.value);
       break;
 
     case 'filter-tag': {
@@ -913,6 +920,7 @@ document.addEventListener('click', function (e) {
       if (i === -1) { ui.discover.tags.push(t); ui.discover.lastChip = t; }
       else { ui.discover.tags.splice(i, 1); ui.discover.lastChip = null; }
       render();
+      focusChoice(target.dataset.action, target.dataset.value);
       break;
     }
 
@@ -920,17 +928,19 @@ document.addEventListener('click', function (e) {
       ui.discover.freeOnly = !ui.discover.freeOnly;
       ui.discover.lastChip = ui.discover.freeOnly ? '무료' : null;
       render();
+      focusChoice(target.dataset.action, target.dataset.value);
       break;
 
     case 'suggest':
       ui.discover.term = target.dataset.value;
-      ui.discover.searchFocused = false;
-      render();
+      ui.discover.searchFocused = true;
+      renderKeepFocus('search-input');
       break;
 
     case 'clear-term':
       ui.discover.term = '';
-      render();
+      ui.discover.searchFocused = true;
+      renderKeepFocus('search-input');
       break;
 
     case 'release-last': {
@@ -946,17 +956,20 @@ document.addEventListener('click', function (e) {
 
     case 'reset-filters':
       ui.discover = { term: '', regionId: '', freeOnly: false, tags: [], searchFocused: false, lastChip: null };
-      render();
+      ui.discover.searchFocused = true;
+      renderKeepFocus('search-input');
       break;
 
     case 'sort-reviews':
       ui.reviewSort = target.dataset.value;
       render();
+      focusChoice(target.dataset.action, target.dataset.value);
       break;
 
     case 'select-region':
       ui.regionTab = target.dataset.value;
       render();
+      focusChoice(target.dataset.action, target.dataset.value);
       break;
 
     case 'region-to-discover':
@@ -1011,19 +1024,19 @@ document.addEventListener('click', function (e) {
     case 'set-rating':
       ui.draft.rating = Number(target.dataset.value);
       render();
-      focusReviewChoice(target.dataset.action, target.dataset.value);
+      focusChoice(target.dataset.action, target.dataset.value);
       break;
 
     case 'set-day':
       ui.draft.day = ui.draft.day === target.dataset.value ? '' : target.dataset.value;
       render();
-      focusReviewChoice(target.dataset.action, target.dataset.value);
+      focusChoice(target.dataset.action, target.dataset.value);
       break;
 
     case 'set-waiting':
       ui.draft.waiting = ui.draft.waiting === target.dataset.value ? null : target.dataset.value;
       render();
-      focusReviewChoice(target.dataset.action, target.dataset.value);
+      focusChoice(target.dataset.action, target.dataset.value);
       break;
 
     case 'submit-review': {
@@ -1068,10 +1081,22 @@ document.addEventListener('change', function (e) {
   }
 });
 
+/* 한글 등 IME 조합 중에는 검색 입력 노드를 교체하지 않는다. */
+document.addEventListener('compositionstart', function (e) {
+  if (e.target.dataset.action === 'search') searchComposing = true;
+});
+document.addEventListener('compositionend', function (e) {
+  if (e.target.dataset.action !== 'search') return;
+  searchComposing = false;
+  ui.discover.term = e.target.value;
+  renderKeepFocus('search-input', e.target.selectionStart);
+});
+
 /* 입력 이벤트 */
 document.addEventListener('input', function (e) {
   const action = e.target.dataset ? e.target.dataset.action : null;
   if (action === 'search') {
+    if (searchComposing || e.isComposing) return;
     ui.discover.term = e.target.value;
     const pos = e.target.selectionStart;
     renderKeepFocus('search-input', pos);
@@ -1124,9 +1149,9 @@ function updateCounter() {
   if (note) note.style.display = canSubmit ? 'none' : '';
 }
 
-function focusReviewChoice(action, value) {
+function focusChoice(action, value) {
   const control = Array.from(app.querySelectorAll('[data-action]')).find(function (el) {
-    return el.dataset.action === action && el.dataset.value === String(value);
+    return el.dataset.action === action && (value === undefined || el.dataset.value === String(value));
   });
   if (control) control.focus({ preventScroll: true });
 }
@@ -1141,7 +1166,7 @@ document.addEventListener('keydown', function (e) {
   const next = (Number(star.dataset.value) - 1 + direction + 5) % 5 + 1;
   ui.draft.rating = next;
   render();
-  focusReviewChoice('set-rating', next);
+  focusChoice('set-rating', next);
 });
 
 /* ============ 시작 ============ */
