@@ -2,7 +2,7 @@
   "name": "weekly-pick",
   "private": true,
   "scripts": {
-    "test": "node --test tests/state.test.cjs",
+    "test": "node --test tests/state.test.cjs tests/drafts.test.cjs",
     "test:browser": "node tests/browser.test.cjs",
     "test:webkit": "BROWSER=webkit node tests/browser.test.cjs"
   },

@@ -16,6 +16,7 @@ const ui = {
   articleApplied: {}
 };
 
+const reviewDraftStore = createReviewDraftStore(function () { return sessionStorage; });
 let currentRoute = null;
 
 /* ============ 라우팅 ============ */
@@ -33,6 +34,7 @@ function parseHash() {
 }
 
 function render() {
+  saveReviewDraft();
   const r = parseHash();
   const name = r.parts[0] || 'home';
   const id = r.parts[1];
@@ -87,6 +89,7 @@ function render() {
 }
 
 window.addEventListener('hashchange', render);
+window.addEventListener('pagehide', saveReviewDraft);
 
 /* 헤더 스크롤 상태 */
 let scrollHandler = null;
@@ -459,6 +462,16 @@ function reviewDraftValues(draft) {
   return { rating: draft.rating, text: draft.text, day: draft.day, waiting: draft.waiting };
 }
 
+function reviewDraftKey(draft) { return draft.exId + '/' + (draft.editId || 'new'); }
+function saveReviewDraft() {
+  if (!ui.draft) return;
+  ui.draft.persisted = reviewDraftStore.write(reviewDraftKey(ui.draft), reviewDraftValues(ui.draft), ui.draft.initial);
+}
+function discardReviewDraft() {
+  if (ui.draft) reviewDraftStore.clear(reviewDraftKey(ui.draft));
+  ui.draft = null;
+}
+
 function hasReviewDraftChanges() {
   if (!ui.draft) return false;
   return Object.keys(ui.draft.initial).some(function (key) {
@@ -483,6 +496,9 @@ function screenReviewWrite(exId, editId) {
     ui.draft = { exId: exId, editId: editId || null, rating: original ? original.rating : 0, text: original ? original.text : '',
       day: original ? original.day : '', waiting: original ? (original.waiting ? 'yes' : 'no') : null };
     ui.draft.initial = reviewDraftValues(ui.draft);
+    const restored = reviewDraftStore.read(reviewDraftKey(ui.draft), ui.draft.initial);
+    if (restored) { Object.assign(ui.draft, restored); ui.draft.restored = true; }
+    saveReviewDraft();
   }
   const d = ui.draft;
 
@@ -508,6 +524,7 @@ function screenReviewWrite(exId, editId) {
     '<main class="content-container screen--with-bar">' +
       '<div class="detail-body">' +
         '<h1 class="sr-only">' + esc(ex.title) + (editId ? ' 후기 수정' : ' 후기 남기기') + '</h1>' +
+        (d.restored ? '<p class="review-edit-banner" role="status">이 탭에서 쓰던 후기를 복원했어요.</p>' : '') +
         '<span class="review-card-label">' + (editId ? '내 후기 수정' : '이 전시를 다녀오셨나요?') + '</span>' +
         (editId ? '<p class="review-edit-banner">수정 중 · ' + esc(getReview(editId).createdAt) + ' 작성</p>' : '') +
         stopCardHTML(ex, null, venueAndPeriod(ex), { href: null }) +
@@ -537,6 +554,7 @@ function screenReviewWrite(exId, editId) {
         '<p class="form-block__label" id="wait-label">웨이팅이 있었나요?</p>' +
         '<div class="choice-row" role="group" aria-labelledby="wait-label">' + waitChips + '</div>' +
       '</section>' +
+      '<p class="form-note" id="draft-storage-note">' + (d.persisted === false ? '임시 저장을 사용할 수 없어요. 새로고침하면 입력이 사라질 수 있어요.' : '입력은 이 탭에 임시 저장돼요. 등록해야 후기로 남아요.') + '</p>' +
       '<p class="form-note">' + (editId ? '수정해도 방문 완료 상태는 그대로 유지됩니다.' : '후기를 등록하면 방문 기록도 함께 저장돼요.') + '</p>' +
     '</main>' +
     stickyBarHTML(
@@ -808,7 +826,7 @@ document.addEventListener('click', function (e) {
         openConfirm(ui.draft.editId ? '수정을 그만둘까요?' : '쓰던 후기가 사라져요. 그만 쓸까요?',
           '지금 나가면 변경한 별점·후기·방문 정보가 저장되지 않아요.',
           ui.draft.editId ? '계속 수정' : '계속 쓰기', '그만두기', function () {
-            ui.draft = null;
+            discardReviewDraft();
             if (history.length > 1) history.back(); else location.hash = '#/home';
           }, target);
         return;
@@ -857,7 +875,7 @@ document.addEventListener('click', function (e) {
     case 'cancel-edit': {
       const id = ui.draft && ui.draft.editId;
       if (!id) break;
-      const cancel = function () { ui.draft = null; location.hash = '#/review/' + id; };
+      const cancel = function () { discardReviewDraft(); location.hash = '#/review/' + id; };
       if (hasReviewDraftChanges()) openConfirm('수정을 취소할까요?', '변경한 내용은 저장되지 않아요.', '계속 수정', '수정 취소', cancel, target);
       else cancel();
       break;
@@ -1012,7 +1030,7 @@ document.addEventListener('click', function (e) {
       if (!d.day || d.waiting === null) { target.dataset.busy = ''; return; }
       const result = d.editId ? (updateReview(d.editId, values) && getReview(d.editId)) : addReview(values);
       if (!result) { target.dataset.busy = ''; showToast('내용과 전시 상태를 다시 확인해 주세요.'); return; }
-      ui.draft = null;
+      discardReviewDraft();
       location.hash = '#/review/' + result.id;
       showToast(d.editId ? '후기를 수정했어요' : '후기와 방문 기록을 저장했어요');
       break;
@@ -1054,6 +1072,9 @@ document.addEventListener('input', function (e) {
     renderKeepFocus('search-input', pos);
   } else if (action === 'review-text') {
     ui.draft.text = e.target.value;
+    saveReviewDraft();
+    const storageNote = document.getElementById('draft-storage-note');
+    if (storageNote && ui.draft.persisted === false) storageNote.textContent = '임시 저장을 사용할 수 없어요. 새로고침하면 입력이 사라질 수 있어요.';
     updateCounter();
   }
 });
