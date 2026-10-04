@@ -77,6 +77,8 @@ const account = {
       if(generation!==this.generation) return;
       const remote=result.data ? normalizeAccountLibrary(result.data.payload) : emptyAccountLibrary();
       this.revision=result.data ? result.data.revision : 0;
+      // Backfill receipts for records already imported before this feature.
+      if(this.guest && sameAccountLibrary(remote,mergeGuestLibrary(remote,this.guest)))this.rememberImport(user.id,accountLibraryFingerprint(this.guest));
       applyAccountLibrary(remote);
       let pending=null;
       try{if(!ignorePending)pending=JSON.parse(localStorage.getItem(this.pendingKey(user.id)));}catch(error){/* recover through server */}

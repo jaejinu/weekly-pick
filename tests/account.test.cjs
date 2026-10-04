@@ -64,3 +64,10 @@ test('failed import is acknowledged only after successful save retry',async()=>{
  await a.run('account.importGuest()');assert.equal(a.storage.has('weeklypick.imported.owner.vol-01'),false);
  a.run(`account.client.rpc=async()=>({data:1,error:null});`);await a.run('account.retry()');assert.equal(a.storage.has('weeklypick.imported.owner.vol-01'),true);
 });
+
+test('existing server records backfill import receipts without a new write',async()=>{
+ const a=app();a.run(`account.enabled=true;account.guest={...emptyAccountLibrary(),saved:['ex-01']};account.loadFeed=async()=>{};account.client={from:()=>({select(){return this},eq(){return this},maybeSingle:async()=>({data:{revision:1,payload:account.guest}})})};`);
+ await a.run("account.switchUser({id:'owner'})");
+ assert.equal(a.storage.has('weeklypick.imported.owner.vol-01'),true);
+ a.run('applyAccountLibrary(emptyAccountLibrary())');assert.equal(a.run('account.hasGuestImport()'),false);
+});
