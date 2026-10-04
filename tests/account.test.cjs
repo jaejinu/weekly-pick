@@ -4,8 +4,8 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 function app(){
  const storage=new Map();
- const context=vm.createContext({localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},window:{WEEKLY_PICK_CONFIG:null,addEventListener(){}},document:{getElementById:()=>null},queueMicrotask,URL,Date,setTimeout,ui:{draft:null},saveReviewDraft(){},hideToast(){},render(){},showToast(){}});
- vm.runInContext(['data','state','account-data','account'].map(n=>fs.readFileSync('js/'+n+'.js','utf8')).join('\n')+'\nloadState();',context);
+ const context=vm.createContext({localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},window:{WEEKLY_PICK_CONFIG:null,addEventListener(){}},document:{getElementById:()=>null},location:{hash:"#/account",replace(route){this.hash=route;}},queueMicrotask,URL,Date,setTimeout,ui:{draft:null},saveReviewDraft(){},hideToast(){},render(){},showToast(){}});
+ vm.runInContext(['data','state','account-data','account-navigation','account'].map(n=>fs.readFileSync('js/'+n+'.js','utf8')).join('\n')+'\nloadState();',context);
  return {run:code=>vm.runInContext(code,context),json:code=>JSON.parse(JSON.stringify(vm.runInContext(code,context))),storage};
 }
 test('guest import preserves account choices and allocates unique review IDs',()=>{
@@ -34,4 +34,33 @@ test('failed writes are retained per owner, retry succeeds, conflicts stay expli
 test('remote reload discards pending even when storage removal is unavailable',async()=>{
  const a=app();a.run(`account.enabled=true;account.user={id:'owner'};account.guest=emptyAccountLibrary();account.loadFeed=async()=>{};localStorage.setItem(account.pendingKey('owner'),JSON.stringify({revision:0,payload:{...emptyAccountLibrary(),saved:['ex-02']}}));localStorage.removeItem=()=>{throw Error('blocked')};account.client={from:()=>({select(){return this},eq(){return this},maybeSingle:async()=>({data:{revision:1,payload:{...emptyAccountLibrary(),saved:['ex-01']}}})})};`);
  await a.run('account.reloadRemote()');assert.deepEqual(a.json('state.saved'),['ex-01']);assert.equal(a.run('account.phase'),'ready');
+});
+
+test('login return accepts only internal routes, expires, and is consumed across tabs',()=>{
+ const a=app();a.run(`globalThis.now=1000;globalThis.first=createLoginReturnStore(()=>localStorage,()=>now);globalThis.second=createLoginReturnStore(()=>localStorage,()=>now);`);
+ for(const route of ['https://evil.example/','#//evil.example','#/account/delete','#/review/edit/rv-my-1','#/exhibition/ex-99','#/home#https://evil.example','#/discover?token_hash=private','#/regions?rg=unknown']){
+  a.run(`first.remember(${JSON.stringify(route)})`);assert.equal(a.run('first.peek()'),null);
+ }
+ a.run(`first.remember('#/regions?rg=rg-seongsu');`);
+ assert.equal(a.run('second.take()'),'#/regions?rg=rg-seongsu');assert.equal(a.run('first.peek()'),null);
+ a.run(`first.remember('#/review/new/ex-01');now+=31*60*1000;`);assert.equal(a.run('first.peek()'),null);
+ a.run(`localStorage.setItem=()=>{throw Error('blocked')};first.remember('#/saved');`);assert.equal(a.run('first.take()'),'#/saved');
+});
+test('return waits for successful account load and never replays a write',()=>{
+ const a=app();a.run(`loginReturnStore.remember('#/exhibition/ex-01');account.resumeAfterLogin=true;account.user={id:'owner'};account.phase='conflict';account.finishLoginReturn();`);
+ assert.equal(a.run('location.hash'),'#/account');assert.equal(a.run('account.resumeAfterLogin'),true);
+ a.run(`account.phase='ready';account.finishLoginReturn();`);assert.equal(a.run('location.hash'),'#/exhibition/ex-01');assert.equal(a.run('loginReturnStore.peek()'),null);
+});
+test('guest import prompt reflects additions and receipts are owner-specific',()=>{
+ const a=app();a.run(`account.user={id:'first'};account.guest={...emptyAccountLibrary(),saved:['ex-01']};applyAccountLibrary(emptyAccountLibrary());`);
+ assert.equal(a.run('account.hasGuestImport()'),true);
+ a.run(`applyAccountLibrary(mergeGuestLibrary(accountSnapshot(),account.guest));`);assert.equal(a.run('account.hasGuestImport()'),false);
+ a.run(`account.rememberImport('first',accountLibraryFingerprint(account.guest));applyAccountLibrary(emptyAccountLibrary());`);assert.equal(a.run('account.hasGuestImport()'),false);
+ a.run(`account.user={id:'second'};`);assert.equal(a.run('account.hasGuestImport()'),true);
+ a.run(`account.user={id:'first'};account.guest.saved.push('ex-02');`);assert.equal(a.run('account.hasGuestImport()'),true);
+});
+test('failed import is acknowledged only after successful save retry',async()=>{
+ const a=app();a.run(`account.enabled=true;account.user={id:'owner'};account.phase='ready';account.guest={...emptyAccountLibrary(),saved:['ex-01']};applyAccountLibrary(emptyAccountLibrary());account.loadFeed=async()=>{};account.client={rpc:async()=>({error:{code:'NETWORK'}})};`);
+ await a.run('account.importGuest()');assert.equal(a.storage.has('weeklypick.imported.owner.vol-01'),false);
+ a.run(`account.client.rpc=async()=>({data:1,error:null});`);await a.run('account.retry()');assert.equal(a.storage.has('weeklypick.imported.owner.vol-01'),true);
 });

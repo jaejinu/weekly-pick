@@ -3,8 +3,30 @@ const account = {
   enabled: !!(window.WEEKLY_PICK_CONFIG && WEEKLY_PICK_CONFIG.supabaseUrl && WEEKLY_PICK_CONFIG.supabasePublishableKey),
   client:null, user:null, phase:'boot', revision:0, generation:0, pending:null, guest:null,
   publicReviews:[], feedError:false, email:'', mailSending:false, mailSent:false, message:'', cooldownUntil:0,
-  importDismissed:false, initialized:false,
+  importDismissed:false, initialized:false, resumeAfterLogin:false,
   pendingKey: function(id){return 'weeklypick.account.'+id+'.'+ISSUE.id+'.pending';},
+  beginLogin: function(){
+    loginReturnStore.remember(location.hash||'#/home');
+    location.hash='#/account';
+  },
+  finishLoginReturn: function(){
+    if(!this.resumeAfterLogin||!this.user||this.phase!=='ready')return;
+    this.resumeAfterLogin=false;
+    const route=loginReturnStore.take();
+    if(route && location.hash==='#/account'){location.replace(route);showToast('로그인했어요. 보던 화면에서 계속해 주세요.');}
+  },
+  importReceiptKey: function(id){return 'weeklypick.imported.'+id+'.'+ISSUE.id;},
+  rememberImport: function(id,fingerprint){
+    if(typeof fingerprint!=='string')return;
+    try{localStorage.setItem(this.importReceiptKey(id),fingerprint);}catch(error){}
+  },
+  hasGuestImport: function(){
+    if(!this.user||!this.guest||this.importDismissed)return false;
+    try{
+      if(localStorage.getItem(this.importReceiptKey(this.user.id))===accountLibraryFingerprint(this.guest))return false;
+    }catch(error){}
+    try{return !sameAccountLibrary(accountSnapshot(),mergeGuestLibrary(accountSnapshot(),this.guest));}catch(error){return false;}
+  },
   refreshUI: function(){
     const status=document.getElementById('account-status');
     if(status) status.innerHTML=this.enabled && ['boot','loading','saving','error','conflict'].includes(this.phase)
@@ -31,6 +53,7 @@ const account = {
         if(linkError) throw new Error('LINK_INVALID');
         const result=token ? await this.client.auth.verifyOtp({token_hash:token,type:'email'}) : await this.client.auth.exchangeCodeForSession(code);
         if(result.error) throw result.error;
+        this.resumeAfterLogin=true;
       }
       this.authSubscription=this.client.auth.onAuthStateChange((_event,session)=>{setTimeout(()=>this.switchUser(session&&session.user),0);}).data.subscription;
       const result=await this.client.auth.getSession();
@@ -60,13 +83,14 @@ const account = {
       if(pending && pending.payload && Number.isSafeInteger(pending.revision)) {
         try {
           pending.payload=normalizeAccountLibrary(pending.payload);
-          if(sameAccountLibrary(remote,pending.payload)){localStorage.removeItem(this.pendingKey(user.id));}
+          if(sameAccountLibrary(remote,pending.payload)){this.rememberImport(user.id,pending.importFingerprint);localStorage.removeItem(this.pendingKey(user.id));}
           else {this.pending=pending;applyAccountLibrary(pending.payload);}
         }catch(error){pending=null;}
       }
       this.phase=this.pending ? (this.pending.revision===this.revision?'error':'conflict') : 'ready';
       this.message=this.pending?'이 기기에 아직 저장하지 못한 변경이 있어요. 다시 저장하거나 계정 내용을 불러와 주세요.':'';
       render();this.refreshUI();await this.loadFeed();
+      if(generation===this.generation)this.finishLoginReturn();
     }catch(error){if(generation!==this.generation)return;this.phase='error';this.message='계정 데이터를 불러오지 못했어요. 연결을 확인하고 다시 시도해 주세요.';this.refreshUI();}
   },
   loadFeed: async function(){
@@ -84,7 +108,7 @@ const account = {
   },
   allowMutation: function(){
     if(!this.enabled)return true;
-    if(!this.user){location.hash='#/account';this.message='저장·계획·후기를 계정에 남기려면 로그인해 주세요.';this.refreshUI();return false;}
+    if(!this.user){this.beginLogin();this.message='저장·계획·후기를 계정에 남기려면 로그인해 주세요.';this.refreshUI();return false;}
     if(this.phase!=='ready'){showToast(this.phase==='saving'?'저장을 마친 뒤 다시 시도해 주세요.':'계정 연결 상태를 먼저 확인해 주세요.');return false;}
     return true;
   },
@@ -94,19 +118,22 @@ const account = {
     const generation=this.generation;
     queueMicrotask(()=>{if(generation===this.generation)this.save(accountSnapshot(),this.revision);});
   },
-  save: async function(payload,revision){
+  save: async function(payload,revision,importFingerprint){
     if(!this.user)return;
     const generation=this.generation, id=this.user.id;
     this.phase='saving';this.pending={revision:revision,payload:clone(payload)};
+    if(importFingerprint)this.pending.importFingerprint=importFingerprint;
     try{localStorage.setItem(this.pendingKey(id),JSON.stringify(this.pending));}catch(error){/* beforeunload warns until saved */}
     this.refreshUI();
     try {
       const result=await this.client.rpc('save_library',{p_issue:ISSUE.id,p_revision:revision,p_payload:payload});
       if(result.error)throw result.error;
       if(generation!==this.generation)return;
+      this.rememberImport(id,importFingerprint);
       this.revision=result.data;this.pending=null;this.phase='ready';this.message='계정에 저장했어요.';
       try{localStorage.removeItem(this.pendingKey(id));}catch(error){/* reconciliation compares payload on next load */}
       this.refreshUI();await this.loadFeed();
+      if(generation===this.generation)this.finishLoginReturn();
     }catch(error){
       if(generation!==this.generation)return;
       this.phase=error.code==='40001'?'conflict':'error';
@@ -115,7 +142,7 @@ const account = {
     }
   },
   retry: async function(){
-    if(this.pending && this.phase!=='conflict')return this.save(this.pending.payload,this.pending.revision);
+    if(this.pending && this.phase!=='conflict')return this.save(this.pending.payload,this.pending.revision,this.pending.importFingerprint);
     if(this.user)return this.switchUser(this.user,true);
     return this.init();
   },
@@ -141,6 +168,7 @@ const account = {
     if(!this.client || ['saving','deleting'].includes(this.phase))return;
     const result=await this.client.auth.signOut({scope:'local'});
     if(result.error){this.message='로그아웃하지 못했어요. 다시 시도해 주세요.';this.refreshUI();return;}
+    loginReturnStore.clear();this.resumeAfterLogin=false;
     await this.switchUser(null);
   },
   deleteAccount: async function(){
@@ -152,6 +180,8 @@ const account = {
       if(result.error || result.data!==true)throw result.error||new Error('DELETE_FAILED');
       if(generation!==this.generation)return;
       ui.draft=null;reviewDraftStore.clearPrefix(id+'/');
+      loginReturnStore.clear();this.resumeAfterLogin=false;
+      try{localStorage.removeItem(this.importReceiptKey(id));}catch(error){}
       try{localStorage.removeItem(this.pendingKey(id));}catch(error){/* storage may be unavailable */}
       this.pending=null;this.publicReviews=[];this.email='';
       // Deleted users can no longer refresh. Clear this browser's session even if
@@ -169,7 +199,7 @@ const account = {
   importGuest: async function(){
     if(!this.allowMutation()||!this.guest)return;
     const merged=mergeGuestLibrary(accountSnapshot(),this.guest);
-    applyAccountLibrary(merged);this.importDismissed=true;await this.save(merged,this.revision);
+    applyAccountLibrary(merged);this.importDismissed=true;await this.save(merged,this.revision,accountLibraryFingerprint(this.guest));
   }
 };
 window.addEventListener('beforeunload',function(e){if(account.enabled && (account.pending||account.phase==='saving')){e.preventDefault();e.returnValue='';}});
