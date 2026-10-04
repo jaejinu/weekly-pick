@@ -24,3 +24,7 @@ package-lock.json
 
 # 저장소 자동 검증 설정
 .github/
+
+# Backend source and local build tooling
+supabase/
+scripts/

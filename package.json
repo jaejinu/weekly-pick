@@ -2,11 +2,18 @@
   "name": "weekly-pick",
   "private": true,
   "scripts": {
-    "test": "node --test tests/state.test.cjs tests/drafts.test.cjs",
+    "test": "node --test tests/state.test.cjs tests/drafts.test.cjs tests/database.test.cjs tests/account.test.cjs",
     "test:browser": "node tests/browser.test.cjs",
-    "test:webkit": "BROWSER=webkit node tests/browser.test.cjs"
+    "test:webkit": "BROWSER=webkit node tests/browser.test.cjs",
+    "build:auth": "node scripts/build-auth.mjs",
+    "test:account": "node tests/browser-account.test.cjs"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
+    "esbuild": "0.28.2",
     "playwright": "1.63.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.117.2"
   }
 }

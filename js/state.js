@@ -57,6 +57,7 @@ function readKey(key, fallback, validate) {
 }
 
 function writeKey(key, data) {
+  if (typeof account !== 'undefined' && account.enabled && account.user) return;
   try {
     localStorage.setItem(KEYS[key], JSON.stringify({ v: STORE_VERSION, data: data }));
   } catch (err) {
@@ -129,6 +130,7 @@ function loadState() {
 
 function persist(key) {
   writeKey(key, state[key]);
+  if (typeof account !== 'undefined') account.queueSave(key);
 }
 
 /* ---------- 저장 ---------- */
@@ -232,7 +234,7 @@ function addReview(review) {
   if (!canWriteReview(getExhibition(review.exhibitionId)) || !validReviewInput(review)) return null;
   if (myReviewOf(review.exhibitionId)) return null;
   const seq = state.nextReviewSeq++;
-  const saved = Object.assign({}, review, { id: 'rv-my-' + seq, order: seq, text: review.text.trim(), createdAt: state.currentDate });
+  const saved = Object.assign({}, review, { id: 'rv-my-' + seq, order: seq, text: review.text.trim(), createdAt: typeof account!=='undefined' && account.enabled ? new Date().toISOString().slice(0,10) : state.currentDate });
   state.reviews.unshift(saved);
   persist('nextReviewSeq');
   markVisited(review.exhibitionId);
@@ -248,7 +250,8 @@ function allReviews() {
   const sample = SAMPLE_REVIEWS.map(function (r) {
     return Object.assign({}, r, { mine: false });
   });
-  return mine.concat(sample);
+  const members = typeof account !== 'undefined' && account.enabled ? account.publicReviews.filter(function (r) { return !account.user || r.authorId !== account.user.id; }) : [];
+  return mine.concat(members, sample);
 }
 
 function getReview(id) {
@@ -274,6 +277,8 @@ function sortedReviews(mode) {
 
 function reviewOrder(r) {
   // 내가 쓴 후기는 항상 샘플보다 최신
+  if (r.member) return r.order || 0;
+  if (r.mine && typeof account !== 'undefined' && account.enabled) return Date.parse(r.createdAt) + (r.order || 0);
   return r.mine ? 1000 + (r.order || 0) : (r.order || 0);
 }
 

@@ -157,7 +157,7 @@ function reviewCardHTML(review) {
   const ex = getExhibition(review.exhibitionId);
   if (!ex) return '';
   const meta = review.day + ' 방문 · 웨이팅 ' + (review.waiting ? '있음' : '없음') +
-    (review.mine ? ' · 내 후기' : '');
+    (review.mine ? ' · 내 후기' : review.member ? ' · 회원 후기' : ' · 샘플 후기');
   return '<a class="review-card" href="#/review/' + review.id + '">' +
     '<span class="review-card__thumb">' + imageTag(ex.image, '', 78, 78) + '</span>' +
     '<span class="review-card__body">' +
@@ -273,7 +273,7 @@ function stickyBarHTML(buttons, note) {
 
 /* ---------- 공통 고지 ---------- */
 function sampleNoteHTML(text) {
-  return '<p class="sample-note">' + esc(text || '위클리픽의 전시·장소·후기는 모두 가상의 샘플 콘텐츠입니다.') + '</p>';
+  return '<p class="sample-note">' + esc(text || (typeof account!=='undefined' && account.enabled ? '전시·장소와 기본 후기는 가상 샘플이며, 회원이 작성한 후기도 함께 표시돼요.' : '위클리픽의 전시·장소·후기는 모두 가상의 샘플 콘텐츠입니다.')) + '</p>';
 }
 
 function sectionHeaderHTML(title, moreLabel, moreHref) {

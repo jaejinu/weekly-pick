@@ -20,6 +20,7 @@ const server = http.createServer((req,res)=>{
  try {
  fs.mkdirSync(artifacts,{recursive:true});
  const page=await browser.newPage({viewport:{width:430,height:900}, ...(process.env.TEST_STORAGE_STATE ? {storageState:process.env.TEST_STORAGE_STATE} : {})});const errors=[];
+ await page.route('**/js/config.js',r=>r.fulfill({contentType:'text/javascript',body:'window.WEEKLY_PICK_CONFIG={};'}));
  page.on('pageerror',e=>errors.push(e.message));
  const ready=()=>page.waitForFunction(()=>typeof currentRoute !== 'undefined' && currentRoute === location.hash.slice(1));
  const go=async route=>{await page.goto(base+'/#/'+route);await ready();await page.waitForSelector('main');};
