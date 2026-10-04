@@ -8,3 +8,15 @@ assets/images/README.md
 .DS_Store
 **/.DS_Store
 _qa.html
+
+# 로컬 V2 검증 파일
+node_modules/
+tests/
+v2/
+
+# 로컬 인증·환경 파일
+.env*
+.vercel/
+
+# 저장소 자동 검증 설정
+.github/
