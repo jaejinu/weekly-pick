@@ -4,15 +4,17 @@
 
 ## 이메일 계정 연결 — 테스트 단계 (2026-10-05)
 
-- 작업 브랜치 `feat/email-account-sync`. 사용자는 이메일 링크 방식과 테스트 로그인 우선 진행을 선택했다. 일반 발송용 SMTP/도메인은 없음.
+- 작업 브랜치 `feat/email-account-sync`. 사용자는 이메일 링크 방식과 테스트 로그인 우선 진행을 선택했다. 이후 사용자 Resend 계정에서 기존 인증 도메인 `jaejinu.co.kr`을 확인했고, 사용자가 `weeklypick@jaejinu.co.kr` 발신 사용을 선택했다.
 - Supabase `weekly-pick`, ref `ongmhufnmafpzlwpxsvq`. `supabase/migrations/202610050001_accounts.sql`을 새 프로젝트 SQL Editor에서 트랜잭션으로 적용 완료. 로컬 PGlite에서 계정 격리/직접 변경 금지/충돌/공개 후기 소유권 검증. 실제 anon API도 공개 후기 200, 비공개 목록·쓰기 RPC 401 확인.
-- `js/config.js`에는 공개 publishable 키만 있다. 비밀 키/DB 비밀번호는 앱에 넣지 않는다. `testMode:true`는 팀 이메일만 가능한 테스트임을 화면에 명시한다.
-- 기본 Supabase 메일 템플릿을 사용한다. SDK의 PKCE 요청 → callback `?code=` → `exchangeCodeForSession` 처리. 요청한 브라우저에서 링크를 열어야 한다. 추후 custom SMTP 템플릿용 `token_hash`도 처리한다. 주소의 인증 값은 즉시 제거한다.
+- `js/config.js`에는 공개 publishable 키만 있다. 비밀 키/DB 비밀번호는 앱에 넣지 않는다. `testMode:false`로 팀 전용 테스트 안내를 해제했다. Resend SMTP 연결 후 실메일 검증을 진행 중이다.
+- `supabase/templates/`의 한국어 로그인·가입 확인 템플릿을 Supabase에 적용했다. SDK의 PKCE 요청 → callback `?code=` → `exchangeCodeForSession` 처리. 요청한 브라우저에서 링크를 열어야 한다. 추후 custom SMTP 템플릿용 `token_hash`도 처리한다. 주소의 인증 값은 즉시 제거한다.
 - 사용자별 JSON 라이브러리를 RLS로 분리하고, 버전 충돌은 자동 덮어쓰기 없이 계정 화면에서 처리한다. 공개 후기는 저장 RPC가 인증된 사용자 ID로 생성/변경한다. 기존 브라우저 기록은 명시적 가져오기 후 합친다.
 - 저장 실패의 pending 데이터와 후기 초안은 사용자별 키로 분리한다. 로그아웃 시 게스트 기록을 복원한다.
 - 자동 검사: `npm test` (상태·초안·계정·실제 PostgreSQL 정책), `npm run test:browser` / `npm run test:webkit` (기존 데모), `npm run test:account` 및 `BROWSER=webkit npm run test:account` (실제 SDK + mock HTTP로 메일 요청/PKCE/가져오기/후기/실패 복구/로그아웃).
-- 테스트 Preview: https://weekly-pick-9fn0era5i-dbwowls12345-3437s-projects.vercel.app/#/account (Supabase Site URL도 같은 origin).
-- 사용자가 실제 이메일 링크 로그인을 완료했다. 실계정에서 전시 ex-10을 저장하고 새 탭에서 서버 복원을 확인한 뒤 검증용 ex-10만 해제하여 기존 2곳/계획 1곳 상태로 복원했다. 실계정의 공개 후기는 임의로 게시하지 않았으며 후기 흐름은 SDK 브라우저 검사와 SQL 정책 테스트로 검증했다. SMTP를 갖추기 전에는 일반 공개용 운영 로그인으로 전환하지 않는다. 현재 운영은 기존 main을 유지하고 테스트는 Preview에서 진행한다.
+- 테스트 Preview: https://weekly-pick-bwxg672wg-dbwowls12345-3437s-projects.vercel.app/#/account (Supabase Site URL도 같은 origin).
+- 사용자가 실제 이메일 링크 로그인을 완료했다. 실계정에서 전시 ex-10을 저장하고 새 탭에서 서버 복원을 확인한 뒤 검증용 ex-10만 해제하여 기존 2곳/계획 1곳 상태로 복원했다. 실계정의 공개 후기는 임의로 게시하지 않았으며 후기 흐름은 SDK 브라우저 검사와 SQL 정책 테스트로 검증했다. Resend SMTP의 실메일 수신 확인 후 main 병합과 운영 Site URL 전환을 진행한다. 현재 운영은 기존 main을 유지하고 테스트는 Preview에서 진행한다.
+- SMTP: `smtp.resend.com:465`, username `resend`, 발신 `위클리픽 <weeklypick@jaejinu.co.kr>`. 키 이름 `weekly-pick-supabase-auth`, Sending access/jaejinu.co.kr 제한. 비밀 값은 브라우저 클립보드로 Supabase 암호 필드에 직접 전달하고 클립보드를 비웠으며 저장소·채팅에 출력하지 않았다.
+- GitHub Public 가능 여부 질문에 커밋 기록 114개 blob의 대표 비밀 패턴과 민감 파일명을 검사해 발견 없음. 기획·인수인계 문서도 노출되므로 현재 Private 유지 권장. 저장소 공개 변경은 요청/수행하지 않았다.
 - SDK 갱신 시 `npm run build:auth`, `js/vendor/supabase.js`와 license 파일을 함께 커밋한다.
 
 ## 현재 상태
