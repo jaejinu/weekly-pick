@@ -1072,3 +1072,14 @@
 .account-status { display: flex; gap: var(--space-6); justify-content: space-between; align-items: center; padding: var(--space-5) var(--space-page-x); background: var(--color-bg-surface); font-size: var(--font-size-label); }
 .account-status a { min-height: 44px; display: flex; align-items: center; white-space: nowrap; text-decoration: underline; }
 .account-actions { display: flex; flex-wrap: wrap; gap: var(--space-5); }
+
+.account-consent { display:flex; align-items:flex-start; gap:12px; min-height:44px; line-height:1.6; cursor:pointer; }
+.account-consent input { flex:0 0 20px; width:20px; height:20px; margin-top:3px; accent-color:var(--color-text-primary); }
+.privacy-link { display:inline-flex; align-items:center; min-height:44px; text-decoration:underline; text-underline-offset:3px; overflow-wrap:anywhere; }
+.privacy-screen section { margin-block:12px; }
+.privacy-screen h2 { font-size:20px; margin-bottom:12px; }
+.privacy-screen p + p { margin-top:12px; }
+.privacy-screen ul { list-style:disc; padding-left:20px; line-height:1.7; }
+.privacy-screen li { margin-block:12px; overflow-wrap:anywhere; }
+.privacy-screen a { text-decoration:underline; }
+#login-captcha { min-height:65px; width:100%; }

@@ -16,6 +16,13 @@ function createReviewDraftStore(getStorage) {
   }
   return {
     clear: clear,
+    clearPrefix: function (ownerPrefix) {
+      for (const key of memory.keys()) if (key.startsWith(ownerPrefix)) memory.delete(key);
+      try {
+        const storage=getStorage();
+        for (const key of Object.keys(storage)) if (key.startsWith(prefix+ownerPrefix)) storage.removeItem(key);
+      } catch (error) { /* in-memory drafts are already removed */ }
+    },
     write: function (key, values, initial) {
       if (!valid(values) || !valid(initial)) return false;
       if (equal(values, initial)) { clear(key); return true; }

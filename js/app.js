@@ -54,7 +54,8 @@ function render() {
   let activeTab = null;
 
   switch (name) {
-    case 'account': html = screenAccount(); break;
+    case 'account': html = id==='delete'?screenDeleteAccount():screenAccount(); break;
+    case 'privacy': html = screenPrivacy(); break;
     case 'home':      html = screenHome(); activeTab = 'home'; break;
     case 'discover':  html = screenDiscover(r.query); activeTab = 'discover'; break;
     case 'exhibition':html = screenExhibition(id); break;
@@ -78,7 +79,9 @@ function render() {
     (name === 'review' && ['new', 'edit'].includes(r.parts[1]));
   const navHTML = usesBar ? '' : bottomNavHTML(activeTab);
 
+  loginProtection.reset();
   app.innerHTML = html + navHTML;
+  loginProtection.mount();
   toastRegion.classList.toggle('toast-region--bar', usesBar);
 
   currentRoute = r.raw;

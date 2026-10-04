@@ -48,7 +48,7 @@ HTML, CSS, Vanilla JavaScript로 정적 화면을 구성하고 Supabase를 인�
 | 메일 | Supabase Auth + Resend SMTP, 한국어 템플릿은 `supabase/templates/` |
 | 배포·검증 | Vercel, GitHub Actions, Node test runner, PGlite, Playwright |
 
-계정의 저장 목록·계획은 비공개이고 후기는 공개입니다. 서버의 RLS와 RPC가 접근·작성자 권한을 검사합니다. 브라우저 설정에는 공개용 publishable 키만 사용하며, SMTP 비밀 키나 Supabase secret/service-role 키는 클라이언트에 넣지 않습니다.
+계정의 저장 목록·계획은 비공개이고 후기는 공개입니다. 공개 후기 RPC는 내부 계정 ID를 반환하지 않습니다. 로그인에는 개인정보 안내·동의와 Turnstile 검증을 적용하며, 내 계정에서 본인 계정·연결 기록을 삭제할 수 있습니다. 서버의 RLS와 RPC가 접근·작성자 권한을 검사합니다. 브라우저 설정에는 공개용 publishable 키만 사용하며, SMTP 비밀 키나 Supabase secret/service-role 키는 클라이언트에 넣지 않습니다.
 
 ## 로컬 실행
 
@@ -70,7 +70,7 @@ python3 -m http.server 8777
 
 Docker를 사용한다면 `docker compose up -d --build` 후 `http://localhost:8080`에서 확인할 수 있습니다.
 
-독립된 로그인 환경은 본인의 Supabase 프로젝트에 `supabase/migrations/`의 SQL을 적용한 뒤, `js/config.js`에 `supabaseUrl`, `supabasePublishableKey`를 설정합니다. Supabase Auth의 Site URL·허용 Redirect URL을 본인 앱 주소로 지정하고 이메일 발송 설정과 `supabase/templates/`를 적용합니다. 비밀 키는 서버 서비스 설정에서만 관리합니다.
+독립된 로그인 환경은 본인의 Supabase 프로젝트에 `supabase/migrations/`의 SQL을 적용한 뒤, `js/config.js`에 `supabaseUrl`, `supabasePublishableKey`를 설정합니다. 마이그레이션은 파일명 순으로 적용합니다. 기존 배포를 갱신할 때는 `002` 적용 → 새 앱 배포 → `003` 적용 순서를 사용합니다. Supabase Auth의 Site URL·허용 Redirect URL을 본인 앱 주소로 지정하고 이메일 발송 설정과 `supabase/templates/`를 적용합니다. Cloudflare Turnstile 위젯에 본인 앱 호스트를 등록하고 공개 사이트 키를 `turnstileSiteKey`에, 비밀 키를 Supabase Auth의 Attack Protection에 설정합니다. 위젯이 없는 기존 앱을 먼저 교체한 뒤 서버 CAPTCHA를 활성화합니다. 비밀 키는 서버 서비스 설정에서만 관리합니다.
 
 ## 검증
 
@@ -86,9 +86,9 @@ npm run test:account
 BROWSER=webkit npm run test:account
 ```
 
-- 상태·초안·계정·PostgreSQL 정책 테스트 20개.
+- 상태·초안·계정·PostgreSQL 정책 테스트. 공개 조회의 계정 ID 차단, 본인 탈퇴·다른 계정 보존·삭제 후 재저장 차단을 포함합니다.
 - Chromium·WebKit에서 주요 10개 경로를 360·390·430px로 검사하고 계획·후기·키보드·빈 상태 흐름을 검증합니다.
-- 계정 브라우저 검사는 실제 Supabase SDK와 모의 HTTP 응답을 사용합니다. 실제 메일 발송 검사를 대신하지 않습니다.
+- 계정 브라우저 검사는 실제 Supabase SDK와 모의 HTTP 응답을 사용합니다. 실제 메일 발송 검사를 대신하지 않습니다. CAPTCHA 토큰 만료·동의, 탈퇴 확인·실패·재시도와 로컬 기록 정리를 모의 환경에서 검사합니다. 실사용자 계정을 자동 검사에서 삭제하지 않습니다.
 - PR과 `main` 푸시 시 GitHub Actions에서 실행합니다. 독립 테스트 브라우저를 사용하며 화면 캡처는 Actions에 7일간 보관합니다.
 
 실제 계정 저장·복원은 별도로 확인했고, 커스텀 발신 메일 수신과 로그인은 사용자 확인을 받았습니다. 실제 iPhone Safari·스크린리더·사용자 관찰 검증은 남아 있습니다.
