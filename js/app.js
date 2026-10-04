@@ -54,6 +54,7 @@ function render() {
   let activeTab = null;
 
   switch (name) {
+    case 'account': html = screenAccount(); break;
     case 'home':      html = screenHome(); activeTab = 'home'; break;
     case 'discover':  html = screenDiscover(r.query); activeTab = 'discover'; break;
     case 'exhibition':html = screenExhibition(id); break;
@@ -448,7 +449,7 @@ function screenReviewDetail(id) {
         '<div class="review-detail__rating">' + ratingHTML(review.rating, 'lg') + '</div>' +
         '<p class="review-detail__text">' + esc(review.text) + '</p>' +
         '<p class="review-detail__meta">' + esc(review.day) + ' 방문 · 웨이팅 ' +
-          (review.waiting ? '있음' : '없음') + (review.mine ? ' · 내 후기' : '') + '</p>' +
+          (review.waiting ? '있음' : '없음') + (review.mine ? ' · 내 후기' : review.member ? ' · 회원 후기' : ' · 샘플 후기') + '</p>' +
         (review.mine ? '<p class="visit-status">✓ 다녀온 전시로 기록됨</p><div class="review-actions"><a class="btn btn--outline" href="#/review/edit/' + review.id + '">수정</a><button class="btn btn--text" data-action="delete-review" data-id="' + review.id + '">삭제</button></div><p class="form-note">후기를 수정하거나 삭제할 수 있어요.</p>' : '') +
       '</div>' +
       '<section class="detail-section"><h2>이 전시의 다른 후기</h2>' +
@@ -469,7 +470,7 @@ function reviewDraftValues(draft) {
   return { rating: draft.rating, text: draft.text, day: draft.day, waiting: draft.waiting };
 }
 
-function reviewDraftKey(draft) { return draft.exId + '/' + (draft.editId || 'new'); }
+function reviewDraftKey(draft) { return (account.enabled && account.user ? account.user.id + '/' : '') + draft.exId + '/' + (draft.editId || 'new'); }
 function saveReviewDraft() {
   if (!ui.draft) return;
   ui.draft.persisted = reviewDraftStore.write(reviewDraftKey(ui.draft), reviewDraftValues(ui.draft), ui.draft.initial);
@@ -487,6 +488,7 @@ function hasReviewDraftChanges() {
 }
 
 function screenReviewWrite(exId, editId) {
+  if (account.enabled && (!account.user || account.phase === 'loading' || account.phase === 'boot')) return accountReviewGateHTML();
   const ex = getExhibition(exId);
   if (!ex) {
     return detailHeaderHTML('후기 남기기') +
@@ -598,7 +600,7 @@ function screenSaved() {
         return '<div>' + exhibitionCardHTML(e, 'row', label) + (!day && !isClosed(e) ? '<div class="saved-plan-actions"><button class="btn btn--outline btn--compact" data-action="assign" data-id="' + e.id + '" data-day="sat">토요일에 넣기</button><button class="btn btn--outline btn--compact" data-action="assign" data-id="' + e.id + '" data-day="sun">일요일에 넣기</button></div>' : '') + '</div>';
       }).join('') + '</div>' +
       '<a class="btn btn--primary btn--full btn--inline-cta" href="#/my">주말 계획 세우기</a>' +
-      '<p class="form-note">저장은 이 브라우저에서만 유지돼요.</p>' +
+      '<p class="form-note">' + (account.enabled ? '로그인하면 저장 목록을 계정에서 이어서 이용할 수 있어요.' : '저장은 이 브라우저에서만 유지돼요.') + '</p>' +
       sampleNoteHTML() +
     '</main>';
 }
@@ -613,7 +615,7 @@ function screenMy() {
   const noSaved = savedList.length === 0;
 
   return '<main class="content-container screen--with-nav">' +
-      '<div class="screen-head"><h1>내 주말</h1>' +
+      accountEntryHTML() + '<div class="screen-head"><h1>내 주말</h1>' +
         '<p class="screen-head__sub">' + esc(weekendLabel()) + '</p></div>' +
 
       '<div class="summary-tiles">' +
@@ -651,7 +653,7 @@ function screenMy() {
       '<a class="link-row" href="#/archive"><span>지난 호 보기</span>' +
         '<i class="fa-solid fa-chevron-right" aria-hidden="true"></i></a>' +
 
-      '<p class="service-note">위클리픽은 매주 목요일에 새 호를 냅니다. 저장과 계획은 이 브라우저에만 남아요.</p>' +
+      '<p class="service-note">'+(account.enabled?'로그인한 계정의 저장과 계획은 다른 기기에서도 이어서 볼 수 있어요.':'위클리픽은 매주 목요일에 새 호를 냅니다. 저장과 계획은 이 브라우저에만 남아요.')+'</p>' +
       sampleNoteHTML('모든 전시와 장소는 가상의 샘플 콘텐츠입니다.') +
     '</main>';
 }
@@ -825,6 +827,7 @@ document.addEventListener('click', function (e) {
   const target = e.target.closest('[data-action]');
   if (!target) return;
   const action = target.dataset.action;
+  if (['toggle-save','assign','unplan','apply-course','move-plan','visit','submit-review','delete-review','toast-action'].includes(action) && !account.allowMutation()) { e.preventDefault(); return; }
 
   switch (action) {
     case 'back':
@@ -1074,6 +1077,7 @@ document.addEventListener('click', function (e) {
 });
 
 document.addEventListener('change', function (e) {
+  if (e.target.dataset.action === 'start-time' && !account.allowMutation()) { render(); return; }
   if (e.target.dataset.action === 'start-time' && setDayStartTime(e.target.dataset.day, e.target.value)) {
     const day = e.target.dataset.day; render();
     const select = document.getElementById('start-' + day); if (select) select.focus();
@@ -1174,3 +1178,4 @@ document.addEventListener('keydown', function (e) {
 loadState();
 if (!location.hash) location.replace('#/home');
 render();
+account.init();

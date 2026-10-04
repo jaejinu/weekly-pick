@@ -1,0 +1,37 @@
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const vm=require('node:vm');
+function app(){
+ const storage=new Map();
+ const context=vm.createContext({localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},window:{WEEKLY_PICK_CONFIG:null,addEventListener(){}},document:{getElementById:()=>null},queueMicrotask,URL,Date,setTimeout,ui:{draft:null},saveReviewDraft(){},hideToast(){},render(){},showToast(){}});
+ vm.runInContext(['data','state','account-data','account'].map(n=>fs.readFileSync('js/'+n+'.js','utf8')).join('\n')+'\nloadState();',context);
+ return {run:code=>vm.runInContext(code,context),json:code=>JSON.parse(JSON.stringify(vm.runInContext(code,context))),storage};
+}
+test('guest import preserves account choices and allocates unique review IDs',()=>{
+ const a=app();a.run(`globalThis.remote=emptyAccountLibrary();remote.saved=['ex-01'];remote.plan.sun=['ex-01'];remote.reviews=[{id:'rv-my-1',exhibitionId:'ex-01',rating:5,text:'서버',day:'평일',waiting:false,createdAt:'2026-10-05',order:1}];remote.visits={'ex-01':'2026-10-05'};remote.nextReviewSeq=2;
+ globalThis.guest=emptyAccountLibrary();guest.saved=['ex-01','ex-02'];guest.plan.sat=['ex-01','ex-02'];guest.reviews=[{id:'rv-my-1',exhibitionId:'ex-01',rating:4,text:'로컬',day:'평일',waiting:false,createdAt:'2026-10-04',order:1},{id:'rv-my-2',exhibitionId:'ex-02',rating:5,text:'추가',day:'평일',waiting:false,createdAt:'2026-10-04',order:2}];guest.nextReviewSeq=3;globalThis.merged=mergeGuestLibrary(remote,guest);`);
+ assert.deepEqual(a.json('merged.plan'),{sat:['ex-02'],sun:['ex-01']});
+ assert.deepEqual(a.json('merged.reviews.map(r=>[r.id,r.text])'),[['rv-my-2','추가'],['rv-my-1','서버']]);
+ assert.equal(a.run('merged.visits["ex-01"]'),'2026-10-05');
+ assert.equal(a.run('sameAccountLibrary(merged,mergeGuestLibrary(merged,guest))'),true);
+});
+test('an old account response cannot leak into the next account',async()=>{
+ const a=app();a.run(`account.enabled=true;account.guest=emptyAccountLibrary();globalThis.resolveOld=null;account.loadFeed=async()=>{};account.client={from:()=>({select(){return this},eq(){return this},maybeSingle(){return new Promise(resolve=>{resolveOld=resolve;})}})};globalThis.oldRequest=account.switchUser({id:'first'});`);
+ await a.run('account.switchUser(null)');
+ a.run(`resolveOld({data:{revision:7,payload:{...emptyAccountLibrary(),saved:['ex-01']}},error:null})`);await a.run('oldRequest');
+ assert.equal(a.run('account.user'),null);assert.deepEqual(a.json('state.saved'),[]);
+});
+test('failed writes are retained per owner, retry succeeds, conflicts stay explicit',async()=>{
+ const a=app();a.run(`account.enabled=true;account.user={id:'owner'};account.phase='ready';account.loadFeed=async()=>{};account.client={rpc:async()=>({error:{code:'NETWORK'}})};`);
+ await a.run('account.save(emptyAccountLibrary(),0)');
+ assert.equal(a.run('account.phase'),'error');assert.ok(a.storage.has('weeklypick.account.owner.vol-01.pending'));
+ a.run(`account.client.rpc=async()=>({error:null,data:1})`);await a.run('account.retry()');
+ assert.equal(a.run('account.phase'),'ready');assert.equal(a.run('account.revision'),1);assert.equal(a.storage.has('weeklypick.account.owner.vol-01.pending'),false);
+ a.run(`account.client.rpc=async()=>({error:{code:'40001'}})`);await a.run('account.save(emptyAccountLibrary(),1)');
+ assert.equal(a.run('account.phase'),'conflict');assert.ok(a.run('account.pending'));
+});
+test('remote reload discards pending even when storage removal is unavailable',async()=>{
+ const a=app();a.run(`account.enabled=true;account.user={id:'owner'};account.guest=emptyAccountLibrary();account.loadFeed=async()=>{};localStorage.setItem(account.pendingKey('owner'),JSON.stringify({revision:0,payload:{...emptyAccountLibrary(),saved:['ex-02']}}));localStorage.removeItem=()=>{throw Error('blocked')};account.client={from:()=>({select(){return this},eq(){return this},maybeSingle:async()=>({data:{revision:1,payload:{...emptyAccountLibrary(),saved:['ex-01']}}})})};`);
+ await a.run('account.reloadRemote()');assert.deepEqual(a.json('state.saved'),['ex-01']);assert.equal(a.run('account.phase'),'ready');
+});
