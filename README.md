@@ -1,122 +1,107 @@
-# 위클리픽 (WEEKLY PICK)
+# 위클리픽 · WEEKLY PICK
 
-이번 주말 갈 수 있는 서울의 전시·팝업만 골라, 매주 목요일 발행하는 큐레이션 매거진 모바일웹.
+**전시를 발견하고, 저장하고, 이번 주말 일정으로 이어가는 모바일 웹 포트폴리오.**
 
-**🔗 https://weekly-pick.vercel.app**
+서울 전시·팝업을 매거진처럼 둘러보는 경험에 주말 계획과 방문 후기를 연결했습니다. 디자인 토큰부터 화면 구현, 이메일 로그인과 계정별 동기화, 브라우저 회귀 검사까지 포함합니다.
 
-> Auto-deploy: `main` 브랜치 push 시 Vercel 자동 배포
+[라이브 데모](https://weekly-pick.vercel.app) · [구현 PR](https://github.com/jaejinu/weekly-pick/pulls?q=is%3Apr+is%3Amerged) · [자동 검증](https://github.com/jaejinu/weekly-pick/actions/workflows/test.yml)
 
-| | |
+| 발견 | 저장 | 주말 계획 |
+|:---:|:---:|:---:|
+| ![홈 큐레이션](docs/images/home.png) | ![저장한 전시](docs/images/saved.png) | ![내 주말 타임라인](docs/images/my.png) |
+
+> 가상의 전시·기사·샘플 후기와 AI 생성 이미지를 사용하는 데모입니다. 실제 행사 일정이나 예매 서비스가 아닙니다. 화면은 비로그인 데모 상태입니다.
+
+## 체험 순서
+
+1. **둘러보기**에서 지역·요금·태그로 전시를 찾고 저장합니다.
+2. **저장**에서 토요일 또는 일요일에 전시를 배정합니다.
+3. **내 주말**에서 순서와 시작 시각을 바꾸고 관람·이동·종료 예상 시각을 확인합니다.
+4. 내 주말 하단의 **데모 날짜 설정**을 바꿔 방문 기록과 후기 작성·수정·삭제·되돌리기를 체험합니다.
+5. 이메일 링크로 로그인하면 계정에 기록을 저장합니다. 기존 브라우저 기록은 가져오기를 확인한 경우에만 합칩니다.
+
+비로그인 상태에서도 기본 흐름을 체험할 수 있습니다. 로그인 메일은 요청한 브라우저에서 열어 주세요. 로그인 상태의 후기는 공개 피드에 표시됩니다.
+
+## UX에서 해결한 문제
+
+| 문제 | 구현한 동작 |
 |---|---|
-| 배포 | https://weekly-pick.vercel.app |
-| 저장소 | https://github.com/jaejinu/weekly-pick (private) |
-| 화면 | 11개 · 해시 라우팅 · localStorage |
-| 로컬 V2 | 일정 계산 · 방문 기록 · 후기 수정/삭제/되돌리기 구현 |
+| 저장한 전시를 실제 일정으로 연결하기 어려움 | 요일 배정, 순서 변경, 시작 시각 선택과 관람·이동 합계. 4시간 초과 안내 |
+| 후기 작성 중 화면을 이동하면 입력 유실 | 같은 탭의 초안 복원, 실제 변경이 있을 때만 이탈 확인, 삭제 되돌리기 |
+| 한글 검색과 재렌더링 중 입력·포커스 끊김 | IME 조합 중 입력 노드 유지, 필터·정렬·일정 조작 후 포커스 유지 |
+| 로그인 전 기록과 계정 기록이 섞일 가능성 | 명시적 가져오기, 계정별 미저장 변경·초안 분리, 로그아웃 시 게스트 기록 복원 |
+| 여러 기기의 저장이 서로 덮어쓸 가능성 | 리비전 기반 충돌 감지와 다시 불러오기 안내 |
 
-## 실행
+이 표는 구현과 회귀 검사 결과입니다. 사용자 관찰을 통한 사용성 개선 수치나 실제 iPhone 검증 결과를 의미하지 않습니다.
 
-### 1) Docker (권장)
+## 구조와 기술 선택
 
-```bash
-docker compose up -d --build      # http://localhost:8080
-docker compose down               # 종료
-```
+HTML, CSS, Vanilla JavaScript로 정적 화면을 구성하고 Supabase를 인증·데이터 저장에 사용합니다. UI 실행에는 빌드가 필요 없으며 Supabase SDK 번들은 저장소에 포함합니다. SDK 변경 시에만 `npm run build:auth`로 다시 생성합니다.
 
-또는 Compose 없이:
-
-```bash
-docker build -t weeklypick:1.0 .
-docker run -d --name weeklypick -p 8080:80 weeklypick:1.0
-```
-
-- 이미지: `nginx:1.27-alpine` 기반, 약 76MB
-- 헬스체크: `GET /healthz`
-- 포트 변경은 `docker-compose.yml`의 `"8080:80"`에서 앞 숫자만 바꾸면 됩니다.
-- Docker Desktop CLI가 PATH에 없으면:
-  `export PATH="/Applications/Docker.app/Contents/Resources/bin:$PATH"`
-
-### 2) Vercel 배포
-
-정적 사이트라 빌드 설정이 필요 없습니다. 루트의 `vercel.json`이 캐시·보안 헤더와
-해시 라우팅 폴백을 처리합니다.
-
-```bash
-npx vercel --prod      # 재배포 (로그인은 최초 1회: npx vercel login)
-```
-
-**Git 자동 배포를 켜려면** — Vercel GitHub App에 이 저장소 접근 권한을 준 뒤:
-
-```bash
-npx vercel git connect
-```
-
-권한 부여: https://github.com/apps/vercel → Configure → `jaejinu/weekly-pick` 추가
-
-- Framework Preset은 **Other**로 두면 됩니다 (빌드 명령 없음)
-- `.vercelignore`가 문서·Docker 파일을 배포에서 제외합니다
-- 로그인 없이 임시 배포만 해보려면: `npx vercel deploy --temporary`
-
-### 3) Docker 없이
-
-```bash
-python3 -m http.server 8777       # http://localhost:8777
-```
-
-빌드 과정이 없는 정적 사이트라 어떤 정적 서버로도 그대로 뜹니다.
-
-## 구조
-
-```
-index.html
-css/    tokens.css(디자인 토큰) · app.css(레이아웃) · components.css(컴포넌트)
-js/     data.js(콘텐츠) · state.js(상태·파생계산) · components.js(렌더) · app.js(라우팅)
-assets/images/   전시 이미지 10장
-docker/ nginx.conf
-vercel.json  Vercel 배포 설정 (헤더 · 라우팅)
-weeklypick/  디자인 규정 · 화면상세 · 이미지 프롬프트 문서
-```
-
-## 이미지 교체
-
-`assets/images/`의 10장은 현재 **레이아웃 확인용 임시 이미지**입니다.
-`weeklypick/weeklypick-image-prompts.md`의 프롬프트로 생성한 뒤 **같은 파일명으로 덮어쓰면** 됩니다.
-코드 수정은 필요 없습니다.
-
-## 문서
-
-| 문서 | 내용 |
+| 영역 | 파일과 책임 |
 |---|---|
-| `weeklypick/weeklypick-design-rull.md` | 색상 토큰·타이포·컴포넌트·카드뉴스 규칙·QA 기준 |
-| `weeklypick/weeklypick-project.md` | 11개 화면 상세 명세·샘플 데이터·완료 정의 |
-| `weeklypick/weeklypick-image-prompts.md` | 이미지 10장 생성 프롬프트 |
+| 디자인 시스템 | `css/tokens.css` → 공통 색상·타이포·간격, `components.css` → 공용 UI, `app.css` → 화면 배치 |
+| 화면 | `js/app.js` → 해시 라우팅·이벤트, `js/components.js` → 공용 렌더링 |
+| 상태 | `js/state.js` → 계획·방문·후기·마이그레이션, `js/drafts.js` → 같은 탭의 입력 복원 |
+| 계정 | `js/account.js`, `account-data.js`, `account-ui.js` → 인증·동기화·계정 화면 |
+| 데이터베이스 | `supabase/migrations/` → 계정별 RLS, 후기 소유권 검사와 저장 RPC |
+| 메일 | Supabase Auth + Resend SMTP, 한국어 템플릿은 `supabase/templates/` |
+| 배포·검증 | Vercel, GitHub Actions, Node test runner, PGlite, Playwright |
 
-## V2 구현 및 검증
+계정의 저장 목록·계획은 비공개이고 후기는 공개입니다. 서버의 RLS와 RPC가 접근·작성자 권한을 검사합니다. 브라우저 설정에는 공개용 publishable 키만 사용하며, SMTP 비밀 키나 Supabase secret/service-role 키는 클라이언트에 넣지 않습니다.
 
-Figma UX 정리를 기존 HTML/CSS/JS 구조에 반영했습니다. 2026-10-05 프로덕션에 반영했으며 운영 주소와 로컬에서 확인할 수 있습니다.
+## 로컬 실행
 
-- 내 주말: 순서 변경, 10:00~15:00 시작 시각, 관람+이동 합계, 240분 초과 안내
-- 저장 목록: 토요일·일요일 계획 추가
-- 방문·후기: 시작 전 차단, 방문 기록 자동 저장, 내 후기 수정/삭제/되돌리기
-- 후기 입력: 같은 탭에서 뒤로가기·새로고침 후 복원, 등록·취소 시 임시 입력 삭제
-- 내 주말 하단의 **데모 날짜 설정**에서 9.10과 9.14를 전환
-- V1 localStorage 데이터를 유지하며 후기 ID를 V2 단조 증가 ID로 마이그레이션
+```bash
+git clone https://github.com/jaejinu/weekly-pick.git
+cd weekly-pick
+```
 
-앱 실행에는 npm 설치가 필요 없습니다. 자동 검증을 실행할 때만 다음 명령을 사용합니다.
+독립적인 비로그인 데모로 실행하려면 `js/config.js`의 내용을 다음과 같이 바꿉니다. 저장소의 기본 설정은 라이브 데모의 공개 Supabase 프로젝트를 가리킵니다.
+
+```js
+window.WEEKLY_PICK_CONFIG = Object.freeze({});
+```
+
+```bash
+python3 -m http.server 8777
+# http://localhost:8777
+```
+
+Docker를 사용한다면 `docker compose up -d --build` 후 `http://localhost:8080`에서 확인할 수 있습니다.
+
+독립된 로그인 환경은 본인의 Supabase 프로젝트에 `supabase/migrations/`의 SQL을 적용한 뒤, `js/config.js`에 `supabaseUrl`, `supabasePublishableKey`를 설정합니다. Supabase Auth의 Site URL·허용 Redirect URL을 본인 앱 주소로 지정하고 이메일 발송 설정과 `supabase/templates/`를 적용합니다. 비밀 키는 서버 서비스 설정에서만 관리합니다.
+
+## 검증
+
+Node.js 22 기준:
 
 ```bash
 npm ci
-npx playwright install chromium
+npx playwright install chromium webkit
 npm test
 npm run test:browser
+npm run test:webkit
+npm run test:account
+BROWSER=webkit npm run test:account
 ```
 
-브라우저 검증은 임시 로컬 서버와 독립 브라우저를 사용합니다. 기존 브라우저의 데이터에 영향을 주지 않습니다.
-세부 범위와 검증 기록: [V2 구현 기록](v2/04-implementation.md).
+- 상태·초안·계정·PostgreSQL 정책 테스트 20개.
+- Chromium·WebKit에서 주요 10개 경로를 360·390·430px로 검사하고 계획·후기·키보드·빈 상태 흐름을 검증합니다.
+- 계정 브라우저 검사는 실제 Supabase SDK와 모의 HTTP 응답을 사용합니다. 실제 메일 발송 검사를 대신하지 않습니다.
+- PR과 `main` 푸시 시 GitHub Actions에서 실행합니다. 독립 테스트 브라우저를 사용하며 화면 캡처는 Actions에 7일간 보관합니다.
 
-V2 [미리보기 배포](https://weekly-pick-iq8qxx8aq-dbwowls12345-3437s-projects.vercel.app)도 준비되어 있습니다(Vercel 로그인 필요). WebKit 로컬 검증과 배포본 Chromium 검증을 통과했으며, 프로덕션 [weekly-pick.vercel.app](https://weekly-pick.vercel.app)에도 반영했습니다(로그인 불필요).
+실제 계정 저장·복원은 별도로 확인했고, 커스텀 발신 메일 수신과 로그인은 사용자 확인을 받았습니다. 실제 iPhone Safari·스크린리더·사용자 관찰 검증은 남아 있습니다.
 
-### PR 자동 검증
+## 디자인·개발 기록
 
-`main` 대상 PR과 `main` 푸시마다 GitHub Actions의 **V2 checks**가 상태 테스트와 Chromium·WebKit 브라우저 테스트를 실행합니다. 브라우저 검사는 360·390·430px에서 주요 10개 경로와 계획·후기 흐름을 확인하며, 실행 화면은 Actions의 `screenshots-chromium`, `screenshots-webkit` 아티팩트에서 7일간 받을 수 있습니다. 실패한 검사를 해결하고 모두 통과한 뒤 병합합니다.
+- [V1 디자인 규정](weeklypick/weeklypick-design-rull.md): 토큰·타이포·컴포넌트 기준
+- [V1 화면 명세](weeklypick/weeklypick-project.md): 초기 화면·샘플 데이터 설계
+- [V2 범위](v2/02-v2-scope.md) · [V2 구현과 검증 기록](v2/04-implementation.md)
+- [이미지 생성 프롬프트](weeklypick/weeklypick-image-prompts.md) · [이미지 사양](assets/images/README.md)
 
-WebKit을 로컬에서 확인하려면 `npx playwright install webkit` 후 `npm run test:webkit`을 실행하세요.
+V1 문서는 당시의 설계 기록입니다. 현재 로그인·동기화와 후속 UX 개선은 코드와 병합 PR을 기준으로 확인할 수 있습니다. 과거 커밋에는 개발 과정의 문서도 남아 있습니다.
+
+## 범위
+
+전시 데이터 연동, 실시간 길찾기, 예약·결제는 포함하지 않습니다. 이동 시간은 권역별 데모 예상값이며 날짜는 시나리오 재현용 프리셋입니다. 이미지 10장은 생성형 AI로 제작한 샘플 비주얼입니다. 외부 라이브러리의 고지는 [THIRD-PARTY-NOTICES](js/vendor/THIRD-PARTY-NOTICES.txt)에서 확인할 수 있습니다.
