@@ -1,5 +1,23 @@
 const assert = require('node:assert/strict');
 module.exports = async function checkKeyboardNavigation(page, go, ready) {
+  await go('home');
+  await page.locator('.bottom-nav a[href="#/saved"]').focus();
+  await page.keyboard.press('Enter');
+  await page.waitForURL(/#\/saved$/); await ready();
+  assert.equal(await page.locator('main h1').evaluate(el=>el === document.activeElement), true,
+    'keyboard navigation must move focus into the destination screen');
+  assert.equal(await page.title(), '저장한 전시 — 위클리픽');
+  for (const route of ['reviews', 'regions', 'archive', 'account', 'privacy']) {
+    await go(route);
+    assert.equal(await page.locator('main h1').count(), 1, route + ' needs a page heading');
+    assert.equal(await page.title(), (await page.locator('main h1').innerText()) + ' — 위클리픽');
+  }
+  await go('discover?focus=1');
+  assert.equal(await page.evaluate(()=>document.activeElement.id), 'search-input');
+  assert.equal(await page.locator('.search-field').evaluate(el=>{
+    const style = getComputedStyle(el);
+    return style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) >= 2;
+  }), true, 'search focus must have a visible indicator');
   await go('exhibition/ex-01');
   await page.locator('a[href="#/review/new/ex-01"]').click();
   await page.locator('#review-text').waitFor();

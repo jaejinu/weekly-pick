@@ -287,6 +287,10 @@ a { color: inherit; text-decoration: none; }
   background: var(--color-bg-app);
 }
 .search-field i { color: var(--color-text-muted); font-size: 16px; }
+.search-field:focus-within {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
 .search-field input {
   flex: 1 1 auto;
   align-self: stretch;
