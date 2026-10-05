@@ -18,6 +18,7 @@ const server = http.createServer((req,res)=>{
  const base=(process.env.TEST_BASE_URL || 'http://127.0.0.1:'+server.address().port).replace(/\/$/,'');
  const browser=await ({chromium, webkit}[engine]).launch({headless:true});
  try {
+ await require('./browser-images.cjs')(browser, base);
  fs.mkdirSync(artifacts,{recursive:true});
  const page=await browser.newPage({viewport:{width:430,height:900}, ...(process.env.TEST_STORAGE_STATE ? {storageState:process.env.TEST_STORAGE_STATE} : {})});const errors=[];
  await page.route('**/js/config.js',r=>r.fulfill({contentType:'text/javascript',body:'window.WEEKLY_PICK_CONFIG={};'}));
