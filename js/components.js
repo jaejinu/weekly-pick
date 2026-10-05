@@ -8,14 +8,27 @@ function esc(str) {
 
 /* ---------- 이미지 (실패 시 카드 구조 유지) ---------- */
 function imageTag(src, alt, w, h) {
+  // Small fixed-size cards crop 4:3 sources with object-fit: cover. Account for
+  // the cropped width so high-density screens do not receive undersized images.
+  const match = w <= 186 && /^assets\/images\/(ex-[a-z0-9-]+)\.webp$/.exec(src);
+  const responsive = match ? ' srcset="' + [320, 640, 960].map(function (width) {
+    return 'assets/images/responsive/' + match[1] + '-' + width + '.webp ' + width + 'w';
+  }).concat(src + ' 1448w').join(', ') + '" sizes="' + Math.ceil(Math.max(w, h * 4 / 3)) + 'px"' : '';
   return '<img src="' + esc(src) + '" alt="' + esc(alt) + '" width="' + w + '" height="' + h +
-    '" loading="lazy" decoding="async" onerror="onImageError(this)">';
+    '"' + responsive + ' loading="lazy" decoding="async" onerror="onImageError(this)">';
 }
 function imageTagEager(src, alt, w, h) {
   return '<img src="' + esc(src) + '" alt="' + esc(alt) + '" width="' + w + '" height="' + h +
     '" decoding="async" onerror="onImageError(this)">';
 }
 function onImageError(img) {
+  if (img.hasAttribute('srcset')) {
+    const original = img.getAttribute('src');
+    img.removeAttribute('srcset');
+    img.removeAttribute('sizes');
+    img.src = original;
+    return;
+  }
   const box = img.parentNode;
   if (!box || box.querySelector('.img-fallback')) return;
   img.remove();
