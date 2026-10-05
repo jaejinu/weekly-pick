@@ -39,6 +39,7 @@ function render() {
   saveReviewDraft();
   const r = parseHash();
   const routeChanged = currentRoute !== r.raw;
+  const navigating = routeChanged && currentRoute !== null;
   if (routeChanged) {
     searchComposing = false;
     if (ui.modalConfirm) closeModal();
@@ -81,6 +82,9 @@ function render() {
 
   loginProtection.reset();
   app.innerHTML = html + navHTML;
+  const heading = app.querySelector('main h1');
+  const pageLabel = heading || app.querySelector('.detail-header__title');
+  document.title = pageLabel ? pageLabel.textContent.trim() + ' — 위클리픽' : '위클리픽 — 이번 주말, 갈 만한 것만';
   loginProtection.mount();
   toastRegion.classList.toggle('toast-region--bar', usesBar);
 
@@ -89,6 +93,14 @@ function render() {
   // 스크롤 처리: 뒤로 가기로 목록에 돌아오면 위치 복원
   const remembered = ui.scrollMemory[r.raw];
   window.scrollTo(0, typeof remembered === 'number' ? remembered : 0);
+
+  if (navigating) {
+    const destination = heading || app.querySelector('main');
+    if (destination) {
+      destination.setAttribute('tabindex', '-1');
+      destination.focus({ preventScroll: true });
+    }
+  }
 
   if (routeChanged && r.query.focus === '1') {
     const input = document.getElementById('search-input');
@@ -417,6 +429,7 @@ function screenReviewFeed() {
   const list = sortedReviews(ui.reviewSort);
   return detailHeaderHTML('다녀온 사람들') +
     '<main class="content-container screen--with-nav">' +
+      '<h1 class="sr-only">다녀온 사람들</h1>' +
       '<div class="sort-tabs" role="group" aria-label="후기 정렬">' +
         chipHTML('최신순', ui.reviewSort === 'latest', 'sort-reviews', 'latest') +
         chipHTML('별점순', ui.reviewSort === 'rating', 'sort-reviews', 'rating') +
@@ -711,6 +724,7 @@ function screenRegions(query, routeChanged) {
 
   return detailHeaderHTML('동네별로 보기') +
     '<main class="content-container screen--with-nav">' +
+      '<h1 class="sr-only">동네별로 보기</h1>' +
       '<div class="filter-row" role="group" aria-label="권역 선택">' +
         REGIONS.map(function (rg) {
           return chipHTML(rg.name, rg.id === region.id, 'select-region', rg.id);
@@ -740,6 +754,7 @@ function screenArchive() {
   const hero = getExhibition('ex-01');
   return detailHeaderHTML('지난 호') +
     '<main class="content-container screen--with-nav">' +
+      '<h1 class="sr-only">지난 호</h1>' +
       '<section class="archive-current">' +
         '<span class="archive-label">이번 호</span>' +
         '<a class="stop-card" href="#/home">' +
