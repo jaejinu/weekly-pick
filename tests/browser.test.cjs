@@ -69,11 +69,17 @@ const server = http.createServer((req,res)=>{
  await require('./browser-accessibility.cjs')(page, go, ready);
  await require('./browser-discovery.cjs')(page, go, ready);
  await go('review/rv-01');await page.locator('.review-detail__text').waitFor();assert.equal(await page.locator('[data-action="delete-review"]').count(),0);
- for(const width of [360,390,430]){
+ for(const width of [320,360,390,430]){
   await page.setViewportSize({width,height:900});
   for(const route of ['home','discover','saved','my','exhibition/ex-01','article/art-01','reviews','review/edit/rv-my-1','regions','archive']){
    await go(route);
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth),false,`${route} overflow at ${width}`);
+   const clipped = await page.locator('.ex-card--row .info-strip__cell').evaluateAll(cells=>cells.flatMap(cell=>{
+    const bounds=cell.getBoundingClientRect();
+    const items=[...cell.children].filter(el=>!el.classList.contains('sr-only')&&getComputedStyle(el).display!=='none');
+    return items.some(el=>{const rect=el.getBoundingClientRect();return rect.left<bounds.left-1||rect.right>bounds.right+1||rect.top<bounds.top-1||rect.bottom>bounds.bottom+1;}) ? [cell.textContent] : [];
+   }));
+   assert.deepEqual(clipped,[],`${route} card information clipped at ${width}`);
   }
  }
  await go('discover');await page.locator('#search-input').fill('일치하지않는검색어');assert.match(await page.locator('.empty-state').innerText(),/없어요/);await shot('search-empty');
@@ -81,7 +87,7 @@ const server = http.createServer((req,res)=>{
  await page.evaluate(()=>{state.saved=[];state.plan={sat:[],sun:[]};persist('saved');persist('plan');});
  await go('saved');assert.match(await page.locator('.empty-state').innerText(),/마음에 드는/);await shot('saved-empty');
  assert.deepEqual(errors,[]);
- console.log('PASS: timeline, date states, persistence, review create/edit/delete/undo, sample protection, draft recovery/exit and modal keyboard access, empty states, and 10 routes at 360/390/430px.');
+ console.log('PASS: timeline, date states, persistence, review create/edit/delete/undo, sample protection, draft recovery/exit and modal keyboard access, empty states, and 10 routes with unclipped card information at 320/360/390/430px.');
  console.log('Browser:',engine,'Target:',base,'Screenshots:',artifacts);
  } finally {await browser.close();server.close();}
 })().catch(e=>{console.error(e);server.close();process.exitCode=1;});
