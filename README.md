@@ -2,17 +2,7 @@
 
 **전시를 발견하고, 저장하고, 이번 주말 일정으로 이어가는 모바일 웹 포트폴리오.**
 
-<<<<<<< Updated upstream
 서울 전시·팝업을 매거진처럼 둘러보는 경험에 주말 계획과 방문 후기를 연결했습니다. 디자인 토큰부터 화면 구현, 이메일 로그인과 계정별 동기화, 브라우저 회귀 검사까지 포함합니다.
-=======
-**🔗 https://weekly-pick.vercel.app** · 모바일 화면 기준(데스크톱은 개발자도구 기기 모드 권장)
-
-| 홈 — 이번 주 픽 | 전시 상세 | 전시 탐색 |
-| :---: | :---: | :---: |
-| <img src="docs/screenshots/home.webp" width="240" alt="홈 화면"> | <img src="docs/screenshots/detail.webp" width="240" alt="전시 상세 화면"> | <img src="docs/screenshots/discover.webp" width="240" alt="전시 탐색 화면"> |
-
-> 전시·장소·이미지는 모두 가상으로 만든 샘플입니다. 이미지는 AI로 생성했습니다.
->>>>>>> Stashed changes
 
 [라이브 데모](https://weekly-pick.vercel.app) · [구현 PR](https://github.com/jaejinu/weekly-pick/pulls?q=is%3Apr+is%3Amerged) · [자동 검증](https://github.com/jaejinu/weekly-pick/actions/workflows/test.yml)
 
@@ -36,18 +26,11 @@
 
 | 문제 | 구현한 동작 |
 |---|---|
-<<<<<<< Updated upstream
 | 저장한 전시를 실제 일정으로 연결하기 어려움 | 요일 배정, 순서 변경, 시작 시각 선택과 관람·이동 합계. 4시간 초과 안내 |
 | 후기 작성 중 화면을 이동하면 입력 유실 | 같은 탭의 초안 복원, 실제 변경이 있을 때만 이탈 확인, 삭제 되돌리기 |
 | 한글 검색과 재렌더링 중 입력·포커스 끊김 | IME 조합 중 입력 노드 유지, 필터·정렬·일정 조작 후 포커스 유지 |
 | 로그인 전 기록과 계정 기록이 섞일 가능성 | 명시적 가져오기, 계정별 미저장 변경·초안 분리, 로그아웃 시 게스트 기록 복원 |
 | 여러 기기의 저장이 서로 덮어쓸 가능성 | 리비전 기반 충돌 감지와 다시 불러오기 안내 |
-=======
-| 배포 | https://weekly-pick.vercel.app |
-| 저장소 | https://github.com/jaejinu/weekly-pick |
-| 화면 | 11개 · 해시 라우팅 · localStorage |
-| 로컬 V2 | 일정 계산 · 방문 기록 · 후기 수정/삭제/되돌리기 구현 |
->>>>>>> Stashed changes
 
 이 표는 구현과 회귀 검사 결과입니다. 사용자 관찰을 통한 사용성 개선 수치나 실제 iPhone 검증 결과를 의미하지 않습니다.
 
