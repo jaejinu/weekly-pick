@@ -1,5 +1,7 @@
 # 위클리픽 화면상세 문서 (weeklypick-project.md)
 
+> 과거 기록: V1 당시의 화면 명세입니다. 현재 로그인·계정 동기화와 후속 UX는 포함하지 않습니다. 현재 동작과 실행 방법은 [README](../README.md) 및 코드를 기준으로 확인하세요.
+
 > 서비스: **위클리픽 (WEEKLY PICK)**
 > 버전: 1.0 · 2026-09-09
 > 기준 문서: `beginner-project.md` v1.0 (구조·항목·명세 수준), `weeklypick-design-rull.md` v1.0 (디자인 시스템)
