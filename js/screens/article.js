@@ -59,4 +59,3 @@ function screenArticle(id) {
     '</main>' +
     stickyBarHTML(bar);
 }
-

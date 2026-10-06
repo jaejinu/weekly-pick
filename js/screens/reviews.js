@@ -164,4 +164,3 @@ function screenReviewWrite(exId, editId) {
       canSubmit ? null : '별점·후기·방문 정보를 입력해 주세요'
     );
 }
-

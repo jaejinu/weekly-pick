@@ -122,4 +122,3 @@ function daySlotHTML(day, dayLabel, dateISO) {
       (totals.total > PLAN_LIMIT_MIN ? '<p class="day-slot__warning">반나절을 넘는 일정이에요. 순서를 바꾸거나 한 곳을 덜어보세요.</p>' : '')
       : '<p class="day-slot__empty">이 날은 아직 비어 있어요</p><a class="btn btn--outline" href="#/saved">저장한 전시에서 추가</a>') + '</div>';
 }
-

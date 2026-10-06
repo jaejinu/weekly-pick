@@ -211,4 +211,3 @@ function screenArchive() {
       sampleNoteHTML() +
     '</main>';
 }
-
