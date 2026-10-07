@@ -205,7 +205,7 @@ document.addEventListener('click', function (e) {
   const target = e.target.closest('[data-action]');
   if (!target) return;
   const action = target.dataset.action;
-  if (['toggle-save','assign','unplan','apply-course','move-plan','visit','submit-review','delete-review','toast-action'].includes(action) && !account.allowMutation()) { e.preventDefault(); return; }
+  if (['toggle-save','assign','unplan','apply-course','move-plan','visit','submit-review','delete-review','toast-action'].includes(action) && !account.allowMutation(action)) { e.preventDefault(); return; }
 
   switch (action) {
     case 'back':
@@ -422,6 +422,12 @@ document.addEventListener('click', function (e) {
 
     case 'submit-review': {
       e.preventDefault();
+      const invalid=ui.draft && Object.keys(reviewValidationErrors(ui.draft));
+      if(invalid && invalid.length){
+        ui.draft.textTouched=true;updateCounter();
+        const selectors={rating:'.rating-input [tabindex="0"]',text:'#review-text',day:'[data-action="set-day"]',waiting:'[data-action="set-waiting"]'};
+        const field=app.querySelector(selectors[invalid[0]]);if(field)field.focus();return;
+      }
       if (target.disabled || target.dataset.busy === '1') return;
       target.dataset.busy = '1';
       const d = ui.draft;
@@ -455,7 +461,7 @@ document.addEventListener('click', function (e) {
 });
 
 document.addEventListener('change', function (e) {
-  if (e.target.dataset.action === 'start-time' && !account.allowMutation()) { render(); return; }
+  if (e.target.dataset.action === 'start-time' && !account.allowMutation('start-time')) { render(); return; }
   if (e.target.dataset.action === 'start-time' && setDayStartTime(e.target.dataset.day, e.target.value)) {
     const day = e.target.dataset.day; render();
     const select = document.getElementById('start-' + day); if (select) select.focus();
@@ -491,6 +497,10 @@ document.addEventListener('input', function (e) {
   }
 });
 
+document.addEventListener('focusout', function(e){
+  if(e.target.id==='review-text'&&ui.draft){ui.draft.textTouched=true;updateCounter();}
+});
+
 document.addEventListener('focusin', function (e) {
   if (e.target.id === 'search-input' && !ui.discover.searchFocused && ui.discover.term === '') {
     ui.discover.searchFocused = true;
@@ -521,14 +531,18 @@ function updateCounter() {
     counter.textContent = d.text.length + ' / 80';
     counter.classList.toggle('form-counter__num--over', over);
   }
-  if (errorEl) errorEl.textContent = over ? '한 줄은 80자까지 쓸 수 있어요. 지금 ' + d.text.length + '자예요.' : '';
+  const errors=reviewValidationErrors(d);
+  const textError=over||d.textTouched ? errors.text||'' : '';
+  if (errorEl) errorEl.textContent = textError;
   if (textarea) {
-    textarea.classList.toggle('form-textarea--error', over);
-    if (over) textarea.setAttribute('aria-invalid', 'true'); else textarea.removeAttribute('aria-invalid');
+    textarea.classList.toggle('form-textarea--error', !!textError);
+    if (textError) textarea.setAttribute('aria-invalid', 'true'); else textarea.removeAttribute('aria-invalid');
   }
-  const canSubmit = d.rating >= 1 && d.text.trim().length > 0 && !over && d.day && d.waiting !== null;
+  const canSubmit = Object.keys(errors).length===0;
+  const summary=document.getElementById('review-validation-status');
+  if(summary)summary.textContent=reviewValidationSummary(d);
   if (submit) submit.disabled = !canSubmit;
-  if (note) note.style.display = canSubmit ? 'none' : '';
+  if (note) {note.style.display = canSubmit ? 'none' : '';note.textContent=canSubmit?'':Object.values(errors)[0];}
 }
 
 function focusChoice(action, value) {

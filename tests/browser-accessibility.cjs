@@ -21,6 +21,13 @@ module.exports = async function checkKeyboardNavigation(page, go, ready) {
   await go('exhibition/ex-01');
   await page.locator('a[href="#/review/new/ex-01"]').click();
   await page.locator('#review-text').waitFor();
+  assert.match(await page.locator('#review-validation-status').innerText(),/별점.*후기 내용.*방문 요일.*웨이팅/);
+  assert.equal(await page.locator('#text-error').innerText(),'');
+  await page.locator('#review-text').focus();await page.locator('#review-text').blur();
+  assert.match(await page.locator('#text-error').innerText(),/입력해/);
+  await page.locator('#review-text').fill('   ');
+  assert.equal(await page.locator('[data-action="submit-review"]').isDisabled(),true);
+  await page.locator('#review-text').fill('');
   assert.equal(await page.locator('[role="radio"][tabindex="0"]').count(), 1);
   await page.locator('[role="radio"][tabindex="0"]').focus();
   await page.keyboard.press('Space');
@@ -47,6 +54,7 @@ module.exports = async function checkKeyboardNavigation(page, go, ready) {
   assert.equal(await page.locator('#review-text').getAttribute('aria-invalid'), null);
   assert.equal(await page.locator('#text-error').innerText(), '');
   assert.equal(await page.locator('[data-action="submit-review"]').isEnabled(), true);
+  assert.match(await page.locator('#review-validation-status').innerText(),/모두 입력/);
 
   await page.locator('[data-action="back"]').click();
   await page.locator('[role="dialog"]').waitFor();

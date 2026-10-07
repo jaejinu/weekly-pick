@@ -5,15 +5,18 @@ const account = {
   publicReviews:[], feedError:false, email:'', mailSending:false, mailSent:false, message:'', cooldownUntil:0,
   importDismissed:false, initialized:false, resumeAfterLogin:false,
   pendingKey: function(id){return 'weeklypick.account.'+id+'.'+ISSUE.id+'.pending';},
-  beginLogin: function(){
-    loginReturnStore.remember(location.hash||'#/home');
+  beginLogin: function(intent){
+    loginReturnStore.remember(location.hash||'#/home',intent);
+    this.message='';
+    loginValidation.reset();
     location.hash='#/account';
   },
   finishLoginReturn: function(){
     if(!this.resumeAfterLogin||!this.user||this.phase!=='ready')return;
     this.resumeAfterLogin=false;
+    const intent=loginReturnStore.intent();
     const route=loginReturnStore.take();
-    if(route && location.hash==='#/account'){location.replace(route);showToast('로그인했어요. 보던 화면에서 계속해 주세요.');}
+    if(route && location.hash==='#/account'){location.replace(route);showToast(intent ? '로그인했어요. '+LOGIN_GUIDANCE[intent].next.replace('로그인 후 ','') : '로그인했어요. 보던 화면에서 계속해 주세요.');}
   },
   importReceiptKey: function(id){return 'weeklypick.imported.'+id+'.'+ISSUE.id;},
   rememberImport: function(id,fingerprint){
@@ -108,9 +111,9 @@ const account = {
     // Do not replace a form while the user is typing.
     if(!ui.draft)render();
   },
-  allowMutation: function(){
+  allowMutation: function(action){
     if(!this.enabled)return true;
-    if(!this.user){this.beginLogin();this.message='저장·계획·후기를 계정에 남기려면 로그인해 주세요.';this.refreshUI();return false;}
+    if(!this.user){this.beginLogin(loginIntentForAction(action));this.refreshUI();return false;}
     if(this.phase!=='ready'){showToast(this.phase==='saving'?'저장을 마친 뒤 다시 시도해 주세요.':'계정 연결 상태를 먼저 확인해 주세요.');return false;}
     return true;
   },
@@ -154,6 +157,9 @@ const account = {
     this.pending=null;await this.switchUser(this.user,true,true);
   },
   sendLink: async function(email){
+    const validationError=emailValidationMessage(email);
+    if(validationError){loginValidation.update(true);return;}
+    email=email.trim();
     if(!this.client || this.mailSending || Date.now()<this.cooldownUntil)return;
     if(!loginProtection.consent || (loginProtection.required()&&!loginProtection.token))return;
     const captchaToken=loginProtection.token;

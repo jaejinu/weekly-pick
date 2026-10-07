@@ -1,3 +1,10 @@
+function loginContextHTML() {
+  if(!loginReturnStore.peek())return '';
+  const intent=loginReturnStore.intent(), guidance=intent && LOGIN_GUIDANCE[intent];
+  return '<section class="account-card" aria-labelledby="login-context-title"><h2 id="login-context-title">'+
+    esc(guidance ? guidance.title : '로그인 후 보던 화면으로 돌아가요')+'</h2><p>'+
+    esc(guidance ? guidance.next : '로그인하면 보던 화면에서 계속 둘러볼 수 있어요.')+'</p></section>';
+}
 function accountEntryHTML() {
   if(!account.enabled)return '';
   return '<section class="account-card"><h2>'+(account.user?'내 계정':'기기를 바꿔도 내 주말 그대로')+'</h2><p>'+
@@ -18,11 +25,13 @@ function screenAccount() {
       (pending?'<p class="form-note">미저장 변경은 이 계정으로 다시 로그인하면 확인할 수 있어요.</p>':'');
   }else{
     const busy=account.mailSending||account.phase==='boot', cooling=Date.now()<account.cooldownUntil;
-    body=(WEEKLY_PICK_CONFIG.testMode?'<p class="account-card">테스트 로그인: 현재는 Supabase 프로젝트 팀에 등록된 이메일만 받을 수 있어요.</p>':'')+(loginReturnStore.peek()?'<p class="account-card">로그인 후 보던 화면으로 돌아가요. 저장·계획은 돌아간 뒤 다시 눌러 주세요.</p>':'')+'<p>메일로 받은 링크를 누르면 로그인돼요. 처음이라면 계정도 함께 만들어져요.</p>'+
-      '<form id="account-login-form"><label class="form-block__label" for="account-email">이메일 주소</label><input class="form-textarea account-input" id="account-email" name="email" type="email" autocomplete="email" inputmode="email" required maxlength="254" value="'+esc(account.email)+'" placeholder="you@example.com">'+
-      '<p class="form-note">이메일은 로그인·계정 관리에, 저장·계획·방문·후기는 기록 동기화에 사용하며 탈퇴 시 운영 DB에서 삭제해요. <a class="privacy-link" href="#/privacy">보관·국외 처리 등 자세한 안내</a></p><label class="account-consent"><input id="account-consent" type="checkbox" required'+(loginProtection.consent?' checked':'')+'> 개인정보 수집·이용에 동의해요.</label>'+
-      (loginProtection.required()?'<div id="login-captcha"></div><p id="captcha-status" class="form-note" role="status">보안 확인을 진행해 주세요.</p><button type="button" class="btn btn--text" data-action="captcha-retry">보안 확인 다시 시도</button>':'')+
-      '<button class="btn btn--primary btn--full" type="submit"'+(busy||cooling||!loginProtection.consent||(loginProtection.required()&&!loginProtection.token)?' disabled':'')+'>'+(account.mailSending?'메일 보내는 중…':cooling?'1분 후 다시 보낼 수 있어요':account.mailSent?'로그인 링크 다시 받기':'로그인 링크 받기')+'</button></form>'+
+    body=(WEEKLY_PICK_CONFIG.testMode?'<p class="account-card">테스트 로그인: 현재는 Supabase 프로젝트 팀에 등록된 이메일만 받을 수 있어요.</p>':'')+loginContextHTML()+'<p>메일로 받은 링크를 누르면 로그인돼요. 처음이라면 계정도 함께 만들어져요.</p>'+
+      '<form id="account-login-form" novalidate><label class="form-block__label" for="account-email">이메일 주소</label><input class="form-textarea account-input" id="account-email" name="email" type="email" autocomplete="email" inputmode="email" aria-describedby="account-email-error" required maxlength="254" value="'+esc(account.email)+'" placeholder="you@example.com">'+
+      '<p id="account-email-error" class="field-error" aria-live="polite"></p>'+
+      '<p class="form-note">이메일은 로그인·계정 관리에, 저장·계획·방문·후기는 기록 동기화에 사용하며 탈퇴 시 운영 DB에서 삭제해요. <a class="privacy-link" href="#/privacy">보관·국외 처리 등 자세한 안내</a></p><label class="account-consent"><input id="account-consent" type="checkbox" aria-describedby="login-validation-status" required'+(loginProtection.consent?' checked':'')+'> 개인정보 수집·이용에 동의해요.</label>'+
+      (loginProtection.required()?'<div id="login-captcha"></div><p id="captcha-status" class="form-note" role="status" tabindex="-1">보안 확인을 진행해 주세요.</p><button type="button" class="btn btn--text" data-action="captcha-retry">보안 확인 다시 시도</button>':'')+
+      '<p id="login-validation-status" class="form-note" role="status"></p>'+
+      '<button class="btn btn--primary btn--full" type="submit" aria-describedby="login-validation-status"'+(busy||cooling||!!emailValidationMessage(account.email)||!loginProtection.consent||(loginProtection.required()&&!loginProtection.token)?' disabled':'')+'>'+(account.mailSending?'메일 보내는 중…':cooling?'1분 후 다시 보낼 수 있어요':account.mailSent?'로그인 링크 다시 받기':'로그인 링크 받기')+'</button></form>'+
       (account.mailSent?'<p role="status">메일함을 확인해 주세요. 링크는 한 번만 사용할 수 있어요. 메일을 요청한 브라우저에서 열어 주세요. 메일이 없으면 스팸함도 확인해 주세요.</p>':'')+
       (account.message?'<p role="status">'+esc(account.message)+'</p>':'')+
       (!account.client&&account.phase==='error'?'<button class="btn btn--outline" data-action="account-retry">연결 다시 시도</button>':'')+
@@ -31,20 +40,24 @@ function screenAccount() {
   return detailHeaderHTML('내 계정')+'<main class="content-container account-screen"><h1>'+(account.user?'내 계정':'이메일로 로그인')+'</h1>'+body+(account.feedError?'<p role="status">회원 후기를 불러오지 못했어요. 새로고침하면 다시 시도해요.</p>':'')+'<a class="privacy-link" href="#/privacy">개인정보 처리 안내</a></main>';
 }
 function accountReviewGateHTML() {
-  return detailHeaderHTML('후기 남기기')+'<main class="content-container"><h1>로그인하고 후기를 남겨 주세요</h1><p>방문한 전시의 이야기를 계정에 보관할 수 있어요.</p><a class="btn btn--primary" href="#/account" data-action="account-login">이메일로 로그인</a></main>';
+  return detailHeaderHTML('후기 남기기')+'<main class="content-container"><h1>로그인하고 후기를 남겨 주세요</h1><p>방문한 전시의 이야기를 계정에 보관할 수 있어요.</p><a class="btn btn--primary" href="#/account" data-action="account-login" data-login-intent="review">이메일로 로그인</a></main>';
 }
 document.addEventListener('submit',function(e){
   if(e.target.id!=='account-login-form')return;
-  e.preventDefault();account.sendLink(document.getElementById('account-email').value.trim());
+  e.preventDefault();if(!loginValidation.update(true))return;account.sendLink(document.getElementById('account-email').value.trim());
 });
-document.addEventListener('input',function(e){if(e.target.id==='account-email')account.email=e.target.value;});
+document.addEventListener('input',function(e){if(e.target.id==='account-email'){account.email=e.target.value;loginProtection.updateButton();}});
+document.addEventListener('focusout',function(e){if(e.target.id==='account-email'){loginValidation.emailTouched=true;loginValidation.update(false);}});
+document.addEventListener('change',function(e){
+  if(e.target.id==='delete-confirm'&&e.target.checked){e.target.removeAttribute('aria-invalid');const error=document.getElementById('delete-confirm-error');if(error)error.textContent='';}
+});
 document.addEventListener('click',function(e){
   const target=e.target.closest('[data-action]');if(!target)return;
   switch(target.dataset.action){
     case 'account-cancel-login':loginReturnStore.clear();break;
-    case 'account-login':e.preventDefault();account.beginLogin();break;
+    case 'account-login':e.preventDefault();account.beginLogin(target.dataset.loginIntent);break;
     case 'account-delete':
-      if(!document.getElementById('delete-confirm')?.checked){showToast('삭제 범위 확인에 체크해 주세요.');return;}
+      if(!document.getElementById('delete-confirm')?.checked){const checkbox=document.getElementById('delete-confirm');document.getElementById('delete-confirm-error').textContent='삭제되는 기록을 확인하고 동의에 체크해 주세요.';checkbox.setAttribute('aria-invalid','true');checkbox.focus();return;}
       openConfirm('정말 탈퇴할까요?','이메일 계정, 저장 목록, 계획, 방문 기록과 공개 후기가 삭제돼요. 되돌릴 수 없어요.','취소','계정과 기록 삭제',()=>account.deleteAccount(),target);
       break;
     case 'account-retry':account.retry();break;
@@ -60,5 +73,5 @@ document.addEventListener('click',function(e){
 function screenDeleteAccount() {
   if(!account.user)return detailHeaderHTML('계정 탈퇴')+'<main class="content-container account-screen"><h1>계정 탈퇴</h1><p>본인 계정으로 로그인한 뒤 탈퇴할 수 있어요.</p><a class="btn btn--primary" href="#/account">로그인하기</a></main>';
   const busy=['boot','loading','saving','deleting'].includes(account.phase);
-  return detailHeaderHTML('계정 탈퇴')+'<main class="content-container account-screen"><h1>계정과 기록 삭제</h1><p>'+esc(account.user.email||'현재 로그인한 계정')+'</p><p>이메일 계정과 서버의 저장 목록·계획·방문 기록·공개 후기를 함께 삭제해요. 삭제한 기록은 복구할 수 없어요.</p><p>현재 브라우저의 이 계정 미저장 변경·후기 초안도 지워요. 로그인 전 게스트 기록은 유지돼요. 다른 기기의 로컬 기록은 그 기기에서 사이트 데이터를 지워 주세요.</p><label class="account-consent"><input id="delete-confirm" type="checkbox"'+(busy?' disabled':'')+'> 삭제 범위와 복구할 수 없음을 확인했어요.</label><p role="status">'+esc(account.message)+'</p><button class="btn btn--outline" data-action="account-delete"'+(busy?' disabled':'')+'>'+(account.phase==='deleting'?'삭제 중…':'탈퇴하고 기록 삭제')+'</button><a class="btn btn--text" href="#/account">계속 이용하기</a><a class="privacy-link" href="#/privacy">개인정보 처리 안내</a></main>';
+  return detailHeaderHTML('계정 탈퇴')+'<main class="content-container account-screen"><h1>계정과 기록 삭제</h1><p>'+esc(account.user.email||'현재 로그인한 계정')+'</p><p>이메일 계정과 서버의 저장 목록·계획·방문 기록·공개 후기를 함께 삭제해요. 삭제한 기록은 복구할 수 없어요.</p><p>현재 브라우저의 이 계정 미저장 변경·후기 초안도 지워요. 로그인 전 게스트 기록은 유지돼요. 다른 기기의 로컬 기록은 그 기기에서 사이트 데이터를 지워 주세요.</p><label class="account-consent"><input id="delete-confirm" type="checkbox" required aria-describedby="delete-confirm-hint delete-confirm-error"'+(busy?' disabled':'')+'> 삭제 범위와 복구할 수 없음을 확인했어요.</label><p class="form-note" id="delete-confirm-hint">탈퇴를 진행하려면 삭제 범위 확인에 체크해 주세요.</p><p id="delete-confirm-error" class="field-error" aria-live="polite"></p><p role="status">'+esc(account.message)+'</p><button class="btn btn--outline" data-action="account-delete"'+(busy?' disabled':'')+'>'+(account.phase==='deleting'?'삭제 중…':'탈퇴하고 기록 삭제')+'</button><a class="btn btn--text" href="#/account">계속 이용하기</a><a class="privacy-link" href="#/privacy">개인정보 처리 안내</a></main>';
 }
