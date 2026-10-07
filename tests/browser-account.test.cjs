@@ -24,16 +24,54 @@ const server=http.createServer((req,res)=>{const file=path.resolve(root,'.'+(req
   else {status=400;body={message:'Unexpected mock endpoint '+url.pathname};}
   await route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
  });
+ // Context is guidance only: canceled guest attempts must never write or carry stale copy.
+ for(const scenario of [
+  {route:'saved',selector:'[data-action="assign"]',title:'주말 계획을 바꾸려면 로그인해 주세요',next:'다시 진행'},
+  {route:'exhibition/ex-09',selector:'[data-action="visit"]',title:'방문 기록을 남기려면 로그인해 주세요',next:'다녀왔어요'}
+ ]){
+  await page.goto(base+'/#/'+scenario.route);await page.waitForFunction(()=>account.phase==='guest');
+  const before=await page.evaluate(()=>JSON.stringify(accountSnapshot()));
+  await page.locator(scenario.selector).first().click();await page.waitForURL(/#\/account$/);
+  assert.equal(await page.locator('#login-context-title').innerText(),scenario.title);
+  assert.match(await page.locator('#login-context-title').locator('..').innerText(),new RegExp(scenario.next));
+  assert.equal(await page.evaluate(()=>JSON.stringify(accountSnapshot())),before);assert.equal(payload,null);
+  await page.locator('[data-action="account-cancel-login"]').click();
+  await page.goto(base+'/#/account');await page.waitForFunction(()=>account.phase==='guest');
+  assert.equal(await page.locator('#login-context-title').count(),0);
+ }
+ await page.goto(base+'/#/my');await page.waitForFunction(()=>account.phase==='guest');
+ await page.locator('[data-action="account-login"]').click();await page.waitForURL(/#\/account$/);
+ assert.equal(await page.locator('#login-context-title').innerText(),'로그인 후 보던 화면으로 돌아가요');
+ await page.locator('[data-action="account-cancel-login"]').click();
  await page.goto(base+'/#/exhibition/ex-05');await page.waitForFunction(()=>account.phase==='guest');
  await page.locator('[data-action=toggle-save]').first().click();await page.waitForURL(/#\/account$/);
  assert.equal(await page.evaluate(()=>loginReturnStore.peek()),'#/exhibition/ex-05');
+ assert.equal(await page.locator('#login-context-title').innerText(),'전시를 저장하려면 로그인해 주세요');
+ await page.reload();await page.waitForFunction(()=>account.phase==='guest');
+ assert.match(await page.locator('#login-context-title').locator('..').innerText(),/저장 버튼을 다시/);
+ for(const width of [320,390,430]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
+
+ await page.evaluate(async()=>{await document.fonts.ready;window.scrollTo(0,0);await new Promise(requestAnimationFrame);});
  await page.screenshot({path:'/tmp/weeklypick-auth-'+engine+'.png',fullPage:true});
+ assert.equal(await page.locator('#account-email-error').innerText(),'');
+ assert.match(await page.locator('#login-validation-status').innerText(),/이메일 주소.*개인정보.*보안 확인/);
+ await page.locator('#account-email').focus();await page.locator('#account-email').blur();
+ assert.match(await page.locator('#account-email-error').innerText(),/입력해/);
+ await page.locator('#account-email').fill('wrong@');
+ assert.equal(await page.locator('#account-email').getAttribute('aria-invalid'),'true');
+ assert.match(await page.locator('#account-email-error').innerText(),/형식/);
+ await page.locator('#account-login-form').evaluate(form=>form.requestSubmit());
+ assert.equal(await page.evaluate(()=>document.activeElement.id),'account-email');assert.equal(otpCount,0);
  await page.locator('#account-email').fill('test@example.com');
  assert.equal(await page.locator('button[type=submit]').isDisabled(),true);
+ assert.equal(await page.locator('#account-email').getAttribute('aria-invalid'),null);
+ await page.locator('#account-login-form').evaluate(form=>form.requestSubmit());
+ assert.equal(await page.evaluate(()=>document.activeElement.id),'account-consent');assert.equal(otpCount,0);
  await page.locator('#account-consent').check();
  assert.equal(await page.locator('button[type=submit]').isDisabled(),true);
  await page.waitForFunction(()=>window.testCaptcha);
  await page.evaluate(()=>window.testCaptcha.callback('test-captcha-token'));
+ assert.match(await page.locator('#login-validation-status').innerText(),/모두 확인/);
  assert.equal(await page.locator('button[type=submit]').isDisabled(),false);
  await page.evaluate(()=>window.testCaptcha['expired-callback']());
  assert.equal(await page.locator('button[type=submit]').isDisabled(),true);assert.equal(otpCount,0);
@@ -42,6 +80,7 @@ const server=http.createServer((req,res)=>{const file=path.resolve(root,'.'+(req
  await page.getByText('메일함을 확인해 주세요.',{exact:false}).waitFor();assert.equal(otpCount,1);assert.equal(await page.locator('button[type=submit]').isDisabled(),true);
  await page.goto(base+'/?code=fake-test-code');await page.waitForFunction(()=>account.phase==='ready');
  await page.waitForURL(/#\/exhibition\/ex-05$/);
+ assert.match(await page.locator('#toast-region').innerText(),/저장 버튼을 다시/);
  assert.equal(new URL(page.url()).search,'');assert.equal(await page.evaluate(()=>state.saved.length),0);assert.equal(payload,null);
  await page.goto(base+'/#/account');
  assert.equal(await page.getByText('이 브라우저의 기록 가져오기',{exact:true}).count(),1);
@@ -62,14 +101,21 @@ const server=http.createServer((req,res)=>{const file=path.resolve(root,'.'+(req
  assert.equal(await page.locator('#account-email').count(),1);
  await page.goto(base+'/#/review/new/ex-01');await page.waitForFunction(()=>account.phase==='guest');assert.equal(await page.locator('#review-text').count(),0);
  await page.locator('[data-action=account-login]').click();await page.waitForURL(/#\/account$/);
+ assert.equal(await page.locator('#login-context-title').innerText(),'후기를 남기려면 로그인해 주세요');
+ assert.match(await page.locator('#login-context-title').locator('..').innerText(),/후기 작성 화면/);
  const previousTab=page;page=await previousTab.context().newPage();page.setDefaultTimeout(15000);page.on('pageerror',e=>errors.push(e.message));
  await page.goto(base+'/?token_hash=second-test-token');await page.waitForFunction(()=>account.phase==='ready').catch(async e=>{console.error(await page.evaluate(()=>({phase:account.phase,message:account.message})));throw e;});
  await page.waitForURL(/#\/review\/new\/ex-01$/);assert.equal(revision,3);
+ assert.match(await page.locator('#toast-region').innerText(),/후기 작성 화면/);
+ assert.equal(await page.evaluate(()=>loginReturnStore.intent()),null);
  await previousTab.close();
  await page.goto(base+'/#/account');await page.waitForFunction(()=>account.phase==='ready');assert.equal(await page.locator('[data-action=account-import]').count(),0);
  await page.goto(base+'/#/account/delete');await page.waitForFunction(()=>currentRoute==='/account/delete'&&account.phase==='ready');
  await page.locator('[data-action=account-delete]').click();assert.equal(deleteCount,0);
- await page.locator('#delete-confirm').check();await page.locator('[data-action=account-delete]').click();
+ assert.equal(await page.evaluate(()=>document.activeElement.id),'delete-confirm');
+ assert.match(await page.locator('#delete-confirm-error').innerText(),/체크/);
+ await page.locator('#delete-confirm').check();
+ assert.equal(await page.locator('#delete-confirm-error').innerText(),'');await page.locator('[data-action=account-delete]').click();
  await page.locator('[data-action=modal-close]').click();assert.equal(deleteCount,0);
  await page.locator('[data-action=account-delete]').click();await page.locator('[data-action=modal-confirm]').click();
  await page.waitForFunction(()=>account.phase==='error');assert.equal(deleteCount,1);assert.ok(payload);

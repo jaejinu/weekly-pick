@@ -103,7 +103,9 @@ function screenReviewWrite(exId, editId) {
   const d = ui.draft;
 
   const over = d.text.length > 80;
-  const canSubmit = d.rating >= 1 && d.text.trim().length > 0 && !over && d.day && d.waiting !== null;
+  const errors = reviewValidationErrors(d);
+  const textError = over || d.textTouched ? errors.text || '' : '';
+  const canSubmit = Object.keys(errors).length === 0;
 
   let stars = '';
   for (let i = 1; i <= 5; i++) {
@@ -130,37 +132,38 @@ function screenReviewWrite(exId, editId) {
         stopCardHTML(ex, null, venueAndPeriod(ex), { href: null }) +
       '</div>' +
       '<section class="form-block">' +
-        '<p class="form-block__label" id="rating-label">얼마나 좋았나요?</p>' +
+        '<p class="form-block__label" id="rating-label">얼마나 좋았나요? (필수)</p>' +
         '<p class="form-block__hint">' + (d.rating ? '현재 ' + d.rating + '점 · 별을 눌러 바꿀 수 있어요' : '별을 눌러 점수를 골라 주세요') + '</p>' +
-        '<div class="rating-input" role="radiogroup" aria-labelledby="rating-label">' + stars + '</div>' +
+        '<div class="rating-input" role="radiogroup" aria-required="true" aria-labelledby="rating-label">' + stars + '</div>' +
       '</section>' +
       '<section class="form-block">' +
-        '<label class="form-block__label" for="review-text">한 줄로 남겨 주세요</label>' +
-        '<textarea id="review-text" class="form-textarea' + (over ? ' form-textarea--error' : '') +
+        '<label class="form-block__label" for="review-text">한 줄로 남겨 주세요 (필수, 80자 이내)</label>' +
+        '<textarea id="review-text" class="form-textarea' + (textError ? ' form-textarea--error' : '') +
           '" data-action="review-text" placeholder="40분이면 충분했어요, 오전이 한산해요"' +
-          ' aria-describedby="text-error"' + (over ? ' aria-invalid="true"' : '') + '>' + esc(d.text) + '</textarea>' +
+          ' required aria-describedby="text-error"' + (textError ? ' aria-invalid="true"' : '') + '>' + esc(d.text) + '</textarea>' +
         '<div class="form-counter">' +
           '<span id="text-error" class="form-counter__error" aria-live="polite">' +
-            (over ? '한 줄은 80자까지 쓸 수 있어요. 지금 ' + d.text.length + '자예요.' : '') + '</span>' +
+            esc(textError) + '</span>' +
           '<span class="form-counter__num' + (over ? ' form-counter__num--over' : '') + '">' +
             d.text.length + ' / 80</span>' +
         '</div>' +
       '</section>' +
       '<section class="form-block">' +
-        '<p class="form-block__label" id="day-label">언제 다녀오셨나요?</p>' +
+        '<p class="form-block__label" id="day-label">언제 다녀오셨나요? (필수)</p>' +
         '<div class="choice-row" role="group" aria-labelledby="day-label">' + dayChips + '</div>' +
       '</section>' +
       '<section class="form-block">' +
-        '<p class="form-block__label" id="wait-label">웨이팅이 있었나요?</p>' +
+        '<p class="form-block__label" id="wait-label">웨이팅이 있었나요? (필수)</p>' +
         '<div class="choice-row" role="group" aria-labelledby="wait-label">' + waitChips + '</div>' +
       '</section>' +
+      '<p class="form-note" id="review-validation-status" role="status">'+esc(reviewValidationSummary(d))+'</p>'+
       '<p class="form-note" id="draft-storage-note">' + (d.persisted === false ? '임시 저장을 사용할 수 없어요. 새로고침하면 입력이 사라질 수 있어요.' : '입력은 이 탭에 임시 저장돼요. 등록해야 후기로 남아요.') + '</p>' +
       '<p class="form-note">' + (editId ? '수정해도 방문 완료 상태는 그대로 유지됩니다.' : '후기를 등록하면 방문 기록도 함께 저장돼요.') + '</p>' +
     '</main>' +
     stickyBarHTML(
-      '<button type="button" class="btn btn--primary btn--full" data-action="submit-review"' +
+      '<button type="button" class="btn btn--primary btn--full" data-action="submit-review" aria-describedby="review-validation-status"' +
       (canSubmit ? '' : ' disabled') + '>' + (editId ? '수정 완료' : '후기 등록') + '</button>' +
       (editId ? '<button class="btn btn--outline" data-action="cancel-edit">취소</button>' : ''),
-      canSubmit ? null : '별점·후기·방문 정보를 입력해 주세요'
+      canSubmit ? null : Object.values(errors)[0]
     );
 }

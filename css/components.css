@@ -1093,3 +1093,7 @@
 .privacy-screen li { margin-block:12px; overflow-wrap:anywhere; }
 .privacy-screen a { text-decoration:underline; }
 #login-captcha { min-height:65px; width:100%; }
+
+/* Field feedback stays next to its input; empty messages take no space. */
+.field-error { color: var(--color-danger); font-size: var(--font-size-label); line-height: 1.5; }
+.field-error:empty { display: none; }

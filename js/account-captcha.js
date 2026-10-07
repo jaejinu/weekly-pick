@@ -8,8 +8,9 @@ const loginProtection = {
     this.widget=null;
   },
   updateButton: function(){
+    loginValidation.update(false);
     const button=document.querySelector('#account-login-form button[type="submit"]');
-    if(button)button.disabled=account.mailSending||account.phase==='boot'||Date.now()<account.cooldownUntil||!this.consent||(this.required()&&!this.token);
+    if(button)button.disabled=account.mailSending||account.phase==='boot'||Date.now()<account.cooldownUntil||!!emailValidationMessage(account.email)||!this.consent||(this.required()&&!this.token);
   },
   load: function(){
     if(window.turnstile)return Promise.resolve();
