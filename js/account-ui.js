@@ -10,6 +10,18 @@ function accountEntryHTML() {
   return '<section class="account-card"><h2>'+(account.user?'내 계정':'기기를 바꿔도 내 주말 그대로')+'</h2><p>'+
     (account.user?esc(account.user.email||'로그인됨'):'로그인하고 저장한 전시와 후기를 이어서 이용하세요.')+'</p><a class="btn btn--outline" href="#/account"'+(!account.user?' data-action="account-login"':'')+'>'+ (account.user?'계정·동기화 관리':'이메일로 로그인')+'</a></section>';
 }
+function accountRecoveryHTML() {
+  if(!['error','conflict'].includes(account.phase))return '';
+  if(!account.pending)return '<div class="account-actions"><button class="btn btn--primary" data-action="account-retry">계정 연결 다시 시도</button></div>';
+  const conflict=account.phase==='conflict',data=account.pending.payload;
+  return '<section class="account-card" aria-labelledby="sync-recovery-title"><h2 id="sync-recovery-title">'+
+    (conflict?'다른 기기의 변경을 확인해 주세요':'아직 계정 저장을 확인하지 못했어요')+'</h2><p>'+esc(account.pendingNotice())+'</p>'+
+    '<p>현재 변경 내용: 저장 '+data.saved.length+'곳 · 주말 계획 '+(data.plan.sat.length+data.plan.sun.length)+'곳 · 후기 '+data.reviews.length+'개</p>'+
+    (conflict?'<p>다른 기기의 내용을 보호하기 위해 다시 저장을 멈췄어요. 최신 내용을 불러온 뒤 필요한 변경을 다시 적용해 주세요.</p>':'<p>다시 저장하면 현재 변경을 계정에 반영해요. 연결이 복구돼도 자동으로 재시도하지 않아요.</p>')+
+    '<p>계정 내용으로 바꾸면 현재 미저장 변경은 사라져요. 불러오기에 성공한 뒤에만 교체해요.</p><div class="account-actions">'+
+    (!conflict?'<button class="btn btn--primary" data-action="account-retry">변경 내용 다시 저장</button>':'')+
+    '<button class="btn btn--outline" data-action="account-reload">계정 내용으로 바꾸기</button></div></section>';
+}
 function screenAccount() {
   let body='';
   if(!account.enabled)body='<p>계정 연결을 준비하고 있어요.</p><a class="btn btn--outline" href="#/my">내 주말로 돌아가기</a>';
@@ -17,12 +29,12 @@ function screenAccount() {
     const pending=!!account.pending, busy=['loading','saving','deleting'].includes(account.phase);
     body='<p class="account-email">'+esc(account.user.email||'로그인됨')+'</p><p>저장 목록·주말 계획·방문 기록은 나만 볼 수 있어요. 등록한 후기는 다른 사람도 볼 수 있어요.</p>'+
       '<p role="status">'+esc(account.message||(busy?'계정 데이터를 연결하고 있어요.':'계정에 연결되어 있어요.'))+'</p>'+
-      (['error','conflict'].includes(account.phase)?'<div class="account-actions">'+(account.phase!=='conflict'?'<button class="btn btn--primary" data-action="account-retry">다시 시도</button>':'')+'<button class="btn btn--outline" data-action="account-reload">계정 내용 다시 불러오기</button></div>':'')+
+      accountRecoveryHTML()+
       (!busy&&!pending&&account.phase==='ready'&&account.hasGuestImport()?
        '<section class="account-card"><h2>이 브라우저의 기록 가져오기</h2><p>저장 '+account.guest.saved.length+'곳 · 내 후기 '+account.guest.reviews.length+'개. 계정에 이미 있는 기록을 우선하고 나머지를 추가해요. 가져온 후기는 공개돼요.</p><button class="btn btn--outline" data-action="account-import">가져오기</button><button class="btn btn--text" data-action="account-skip-import">나중에</button></section>':'')+
       '<a class="btn btn--primary" href="#/my">내 주말 보기</a><button class="btn btn--outline" data-action="account-logout"'+(busy?' disabled':'')+'>로그아웃</button>'+
       '<a class="btn btn--text" href="#/account/delete">계정 탈퇴</a>'+
-      (pending?'<p class="form-note">미저장 변경은 이 계정으로 다시 로그인하면 확인할 수 있어요.</p>':'');
+      (pending&&busy?'<p class="form-note">'+esc(account.pendingNotice())+'</p>':'');
   }else{
     const busy=account.mailSending||account.phase==='boot', cooling=Date.now()<account.cooldownUntil;
     body=(WEEKLY_PICK_CONFIG.testMode?'<p class="account-card">테스트 로그인: 현재는 Supabase 프로젝트 팀에 등록된 이메일만 받을 수 있어요.</p>':'')+loginContextHTML()+'<p>메일로 받은 링크를 누르면 로그인돼요. 처음이라면 계정도 함께 만들어져요.</p>'+
@@ -61,9 +73,11 @@ document.addEventListener('click',function(e){
       openConfirm('정말 탈퇴할까요?','이메일 계정, 저장 목록, 계획, 방문 기록과 공개 후기가 삭제돼요. 되돌릴 수 없어요.','취소','계정과 기록 삭제',()=>account.deleteAccount(),target);
       break;
     case 'account-retry':account.retry();break;
-    case 'account-logout':account.signOut();break;
+    case 'account-logout':
+      if(account.pending&&!account.pendingPersisted)openConfirm('저장하지 않고 로그아웃할까요?','변경을 브라우저에 보관하지 못했어요. 로그아웃하면 현재 탭의 미저장 변경을 잃게 돼요.','계속 저장하기','변경을 버리고 로그아웃',()=>account.signOut(),target);
+      else account.signOut();break;
     case 'account-reload':
-      if(account.pending)openConfirm('계정 내용을 다시 불러올까요?','이 기기의 미저장 변경은 버리고 계정에 저장된 내용으로 바꿔요.','취소','다시 불러오기',()=>account.reloadRemote(),target);
+      if(account.pending)openConfirm('미저장 변경을 계정 내용으로 바꿀까요?','불러오기에 성공하면 이 기기의 미저장 변경은 사라져요. 실패하면 현재 변경을 그대로 유지해요.','현재 변경 유지','계정 내용으로 바꾸기',()=>account.reloadRemote(),target);
       else account.reloadRemote();break;
     case 'account-import':openConfirm('이 브라우저의 기록을 가져올까요?','저장·계획·방문 기록을 추가하고 내 후기를 공개해요. 계정의 기존 기록은 유지해요.','취소','가져오기',()=>account.importGuest(),target);break;
     case 'account-skip-import':account.importDismissed=true;account.refreshUI();break;
