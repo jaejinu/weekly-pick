@@ -40,7 +40,7 @@ function screenAccount() {
   return detailHeaderHTML('내 계정')+'<main class="content-container account-screen"><h1>'+(account.user?'내 계정':'이메일로 로그인')+'</h1>'+body+(account.feedError?'<p role="status">회원 후기를 불러오지 못했어요. 새로고침하면 다시 시도해요.</p>':'')+'<a class="privacy-link" href="#/privacy">개인정보 처리 안내</a></main>';
 }
 function accountReviewGateHTML() {
-  return detailHeaderHTML('후기 남기기')+'<main class="content-container"><h1>로그인하고 후기를 남겨 주세요</h1><p>방문한 전시의 이야기를 계정에 보관할 수 있어요.</p><a class="btn btn--primary" href="#/account" data-action="account-login" data-login-intent="review">이메일로 로그인</a></main>';
+  return detailHeaderHTML('후기 남기기')+'<main class="content-container review-login-gate"><h1>로그인하고 후기를 남겨 주세요</h1><p>방문한 전시의 이야기를 계정에 보관할 수 있어요.</p><a class="btn btn--primary" href="#/account" data-action="account-login" data-login-intent="review">이메일로 로그인</a></main>';
 }
 document.addEventListener('submit',function(e){
   if(e.target.id!=='account-login-form')return;

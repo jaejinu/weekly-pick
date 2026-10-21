@@ -37,7 +37,7 @@
               border-color var(--duration-base) var(--ease-standard);
 }
 .detail-header__title {
-  font-size: var(--font-size-section-title);
+  font-size: var(--font-size-header-title);
   font-weight: var(--font-weight-semibold);
   letter-spacing: var(--letter-spacing-heading);
   text-align: center;
@@ -369,12 +369,11 @@
 .pick-hero__label {
   font-size: var(--font-size-meta);
   font-weight: var(--font-weight-semibold);
-  letter-spacing: var(--letter-spacing-wide);
 }
 .pick-hero__title {
   margin-top: var(--space-4);
   font-family: var(--font-family-display);
-  font-size: var(--font-size-section-title);
+  font-size: var(--font-size-screen-title);
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-default);
   letter-spacing: var(--letter-spacing-heading);
@@ -560,7 +559,6 @@
 .article-card__cat {
   font-size: var(--font-size-meta);
   font-weight: var(--font-weight-semibold);
-  letter-spacing: var(--letter-spacing-wide);
 }
 .article-card__title {
   margin-top: var(--space-4);
@@ -571,7 +569,7 @@
   letter-spacing: var(--letter-spacing-heading);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
-.article-card--head .article-card__title { font-size: var(--font-size-section-title); }
+.article-card--head .article-card__title { font-size: var(--font-size-screen-title); }
 .article-card__meta {
   margin-top: var(--space-5);
   font-size: var(--font-size-meta);
@@ -727,7 +725,8 @@
 .day-slot__total-num {
   font-family: var(--font-family-numeral);
   font-size: var(--font-size-stat);
-  line-height: 1;
+  font-weight: var(--font-weight-regular); /* Anton 은 400 하나뿐 — 600 이면 가짜 굵게 그려진다 */
+  line-height: var(--line-height-display);
   font-variant-numeric: tabular-nums;
 }
 .day-slot__total-unit { font-size: var(--font-size-label); }
@@ -780,6 +779,7 @@
 .plain-strip {
   display: flex; align-items: center; gap: var(--space-5);
   margin-top: var(--space-9);
+  margin-bottom: var(--space-6);  /* 요약 → 목록 12px (규정 v2.1 2.3) */
   padding: var(--space-7) var(--space-8);
   border-radius: var(--radius-md);
   background: var(--color-bg-surface);
@@ -909,7 +909,7 @@
   background: var(--color-bg-app);
   text-align: center;
 }
-.modal h2 { font-size: var(--font-size-card-title); font-weight: var(--font-weight-bold); }
+.modal h2 { font-size: var(--font-size-card-title); font-weight: var(--font-weight-semibold); }
 .modal p {
   margin-top: var(--space-6);
   font-size: var(--font-size-label);
@@ -953,15 +953,14 @@
 .recover-note i { color: var(--color-text-muted); margin-top: 2px; }
 
 /* ============ span 기반 카드 내부 요소 블록화 ============ */
+/* 2줄 말줄임(-webkit-box)을 쓰는 제목·후기 본문은 여기서 빼야 한다 — 뒤에 오는 display:block 이 덮어썼다 */
 .pick-hero__body,
 .pick-hero__label,
-.pick-hero__title,
 .pick-hero__meta,
 .pick-hero__strip,
 .ex-card__media,
 .ex-card__body,
 .ex-card__badges,
-.ex-card__title,
 .ex-card__meta,
 .ex-card__strip,
 .stop-card__thumb,
@@ -971,12 +970,10 @@
 .stop-card__meta,
 .article-card__body,
 .article-card__cat,
-.article-card__title,
 .article-card__meta,
 .review-card__thumb,
 .review-card__body,
 .review-card__ex,
-.review-card__text,
 .review-card__meta,
 .plan-item__thumb,
 .plan-item__body,
@@ -1041,7 +1038,7 @@
 .reservation-notice strong { color: var(--color-accent-text); }
 .reservation-notice p { margin-top: var(--space-2); color: var(--color-text-secondary); }
 .timeline-summary { border-top: 1px solid var(--color-border-default); margin-top: var(--space-8); padding-top: var(--space-8); font-size: var(--font-size-label); }
-.timeline-total { display: block; margin-top: var(--space-4); font-size: var(--font-size-stat); font-weight: var(--font-weight-semibold); }
+.timeline-total { display: block; margin-top: var(--space-4); font-size: var(--font-size-stat); }
 .day-slot--over .timeline-total { color: var(--color-accent-text); }
 .timeline-end { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-6); margin-top: var(--space-6); border-radius: var(--radius-md); background: var(--color-bg-app); }
 .timeline-end small { color: var(--color-text-muted); }
@@ -1072,12 +1069,12 @@
 
 /* Account controls reuse the app's existing tokens. */
 .account-screen { display: flex; flex-direction: column; gap: var(--space-8); padding-bottom: var(--space-24); }
-.account-screen h1 { font-size: var(--font-size-page-title); }
+.account-screen h1 { font-size: var(--font-size-screen-title); font-weight: var(--font-weight-semibold); }
 .account-screen p { line-height: 1.6; overflow-wrap: anywhere; }
 .account-screen form { display: flex; flex-direction: column; gap: var(--space-6); }
 .account-input { min-height: 48px; height: 48px; padding-block: var(--space-5); }
 .account-card { padding: var(--space-8); margin-bottom: var(--space-10); background: var(--color-bg-surface); border-radius: var(--radius-card); }
-.account-card h2 { font-size: var(--font-size-body); }
+.account-card h2 { font-size: var(--font-size-body); font-weight: var(--font-weight-semibold); }
 .account-card p { margin-block: var(--space-6); overflow-wrap: anywhere; }
 .account-status { display: flex; gap: var(--space-6); justify-content: space-between; align-items: center; padding: var(--space-5) var(--space-page-x); background: var(--color-bg-surface); font-size: var(--font-size-label); }
 .account-status a { min-height: 44px; display: flex; align-items: center; white-space: nowrap; text-decoration: underline; }
@@ -1097,3 +1094,9 @@
 /* Field feedback stays next to its input; empty messages take no space. */
 .field-error { color: var(--color-danger); font-size: var(--font-size-label); line-height: 1.5; }
 .field-error:empty { display: none; }
+
+/* 후기 작성 — 로그인 안내 (규정 v2.1 2.3 · 4.2) */
+.review-login-gate { padding-top: var(--space-screen-top); }
+.review-login-gate h1 { font-size: var(--font-size-screen-title); font-weight: var(--font-weight-semibold); }
+.review-login-gate p { margin-top: var(--space-4); color: var(--color-text-secondary); }
+.review-login-gate .btn { margin-top: var(--space-8); }
