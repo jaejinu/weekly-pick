@@ -1,7 +1,7 @@
 /* Real Supabase Auth + account storage. Empty config keeps the existing local demo. */
 const account = {
   enabled: !!(window.WEEKLY_PICK_CONFIG && WEEKLY_PICK_CONFIG.supabaseUrl && WEEKLY_PICK_CONFIG.supabasePublishableKey),
-  client:null, user:null, phase:'boot', revision:0, generation:0, pending:null, guest:null,
+  client:null, user:null, phase:'boot', revision:0, generation:0, pending:null, pendingPersisted:false, guest:null,
   publicReviews:[], feedError:false, email:'', mailSending:false, mailSent:false, message:'', cooldownUntil:0,
   importDismissed:false, initialized:false, resumeAfterLogin:false,
   pendingKey: function(id){return 'weeklypick.account.'+id+'.'+ISSUE.id+'.pending';},
@@ -30,10 +30,21 @@ const account = {
     }catch(error){}
     try{return !sameAccountLibrary(accountSnapshot(),mergeGuestLibrary(accountSnapshot(),this.guest));}catch(error){return false;}
   },
+  pendingNotice: function(){
+    return this.pendingPersisted
+      ? '미저장 변경은 이 브라우저에 보관했어요. 같은 브라우저에서 이 계정으로 다시 로그인하면 이어서 확인할 수 있어요.'
+      : '브라우저에 임시 보관하지 못했어요. 변경은 현재 탭에만 남아 있어요. 저장이 끝날 때까지 새로고침하거나 탭을 닫거나 로그아웃하지 마세요.';
+  },
+  statusLabel: function(){
+    if(this.phase==='saving')return '계정에 저장 중이에요. 완료될 때까지 기다려 주세요.';
+    if(this.phase==='loading'||this.phase==='boot')return '계정 내용을 불러오고 있어요.';
+    if(this.phase==='conflict')return '다른 기기의 변경과 겹쳐 저장을 멈췄어요.';
+    return this.pending?'계정 저장을 확인하지 못했어요. 미저장 변경을 확인해 주세요.':'계정 연결을 확인해 주세요.';
+  },
   refreshUI: function(){
     const status=document.getElementById('account-status');
     if(status) status.innerHTML=this.enabled && ['boot','loading','saving','error','conflict'].includes(this.phase)
-      ? '<div class="account-status"><span>'+esc(this.phase==='saving'?'계정에 저장 중…':this.phase==='loading'||this.phase==='boot'?'계정을 확인하고 있어요…':this.phase==='conflict'?'다른 기기에서 바뀐 내용이 있어요.':'계정 연결을 확인해 주세요.')+'</span><a href="#/account">확인</a></div>' : '';
+      ? '<div class="account-status"><span>'+esc(this.statusLabel())+'</span><a href="#/account">상태 확인</a></div>' : '';
     if(typeof currentRoute!=='undefined' && ['/account','/account/delete'].includes(currentRoute)) render();
   },
   clearPrivateUI: function(){
@@ -67,13 +78,20 @@ const account = {
       this.refreshUI();
     }
   },
-  switchUser: async function(user, force, ignorePending){
+  switchUser: async function(user, force){
     if(!force && this.initialized && (this.user&&this.user.id)===(user&&user.id)) return;
     const generation=++this.generation;
     this.initialized=true; this.clearPrivateUI();
-    this.user=user||null; this.pending=null; this.publicReviews=[]; this.message='';this.importDismissed=false;
+    const previousPending=this.user&&user&&this.user.id===user.id?this.pending:null;
+    const previousPersisted=this.pendingPersisted;
+    this.user=user||null; this.pending=null; this.pendingPersisted=false; this.publicReviews=[]; this.message='';this.importDismissed=false;
     if(!user){applyAccountLibrary(this.guest||emptyAccountLibrary());this.phase='guest';render();this.refreshUI();await this.loadFeed();return;}
-    applyAccountLibrary(emptyAccountLibrary()); this.phase='loading';render();this.refreshUI();
+    let cached=previousPending;
+    try{if(!cached)cached=JSON.parse(localStorage.getItem(this.pendingKey(user.id)));}catch(error){}
+    if(cached&&cached.payload&&Number.isSafeInteger(cached.revision)&&cached.revision>=0){
+      try{this.pending={...cached,payload:normalizeAccountLibrary(cached.payload)};this.pendingPersisted=previousPending?previousPersisted:true;}catch(error){}
+    }
+    applyAccountLibrary(this.pending?this.pending.payload:emptyAccountLibrary()); this.phase='loading';render();this.refreshUI();
     try {
       const result=await this.client.from('account_libraries').select('revision,payload').eq('user_id',user.id).eq('issue_id',ISSUE.id).maybeSingle();
       if(result.error) throw result.error;
@@ -82,18 +100,14 @@ const account = {
       this.revision=result.data ? result.data.revision : 0;
       // Backfill receipts for records already imported before this feature.
       if(this.guest && sameAccountLibrary(remote,mergeGuestLibrary(remote,this.guest)))this.rememberImport(user.id,accountLibraryFingerprint(this.guest));
-      applyAccountLibrary(remote);
-      let pending=null;
-      try{if(!ignorePending)pending=JSON.parse(localStorage.getItem(this.pendingKey(user.id)));}catch(error){/* recover through server */}
-      if(pending && pending.payload && Number.isSafeInteger(pending.revision)) {
-        try {
-          pending.payload=normalizeAccountLibrary(pending.payload);
-          if(sameAccountLibrary(remote,pending.payload)){this.rememberImport(user.id,pending.importFingerprint);localStorage.removeItem(this.pendingKey(user.id));}
-          else {this.pending=pending;applyAccountLibrary(pending.payload);}
-        }catch(error){pending=null;}
+      if(this.pending && sameAccountLibrary(remote,this.pending.payload)){
+        this.rememberImport(user.id,this.pending.importFingerprint);
+        this.pending=null;this.pendingPersisted=false;
+        try{localStorage.removeItem(this.pendingKey(user.id));}catch(error){}
       }
+      applyAccountLibrary(this.pending?this.pending.payload:remote);
       this.phase=this.pending ? (this.pending.revision===this.revision?'error':'conflict') : 'ready';
-      this.message=this.pending?'이 기기에 아직 저장하지 못한 변경이 있어요. 다시 저장하거나 계정 내용을 불러와 주세요.':'';
+      this.message=this.pending?'이전에 계정 저장을 확인하지 못한 변경이 있어요.':'';
       render();this.refreshUI();await this.loadFeed();
       if(generation===this.generation)this.finishLoginReturn();
     }catch(error){if(generation!==this.generation)return;this.phase='error';this.message='계정 데이터를 불러오지 못했어요. 연결을 확인하고 다시 시도해 주세요.';this.refreshUI();}
@@ -128,33 +142,54 @@ const account = {
     const generation=this.generation, id=this.user.id;
     this.phase='saving';this.pending={revision:revision,payload:clone(payload)};
     if(importFingerprint)this.pending.importFingerprint=importFingerprint;
-    try{localStorage.setItem(this.pendingKey(id),JSON.stringify(this.pending));}catch(error){/* beforeunload warns until saved */}
+    this.pendingPersisted=false;
+    try{localStorage.setItem(this.pendingKey(id),JSON.stringify(this.pending));this.pendingPersisted=true;}catch(error){/* beforeunload warns until saved */}
     this.refreshUI();
     try {
       const result=await this.client.rpc('save_library',{p_issue:ISSUE.id,p_revision:revision,p_payload:payload});
       if(result.error)throw result.error;
       if(generation!==this.generation)return;
       this.rememberImport(id,importFingerprint);
-      this.revision=result.data;this.pending=null;this.phase='ready';this.message='계정에 저장했어요.';
+      this.revision=result.data;this.pending=null;this.pendingPersisted=false;this.phase='ready';this.message='계정에 저장했어요.';
       try{localStorage.removeItem(this.pendingKey(id));}catch(error){/* reconciliation compares payload on next load */}
       this.refreshUI();await this.loadFeed();
       if(generation===this.generation)this.finishLoginReturn();
     }catch(error){
       if(generation!==this.generation)return;
+      hideToast(); // Do not leave an optimistic saved/undo toast visible after a failed sync.
       this.phase=error.code==='40001'?'conflict':'error';
-      this.message=this.phase==='conflict'?'다른 기기에서 먼저 변경했어요. 계정 내용을 다시 불러와 주세요.':'저장하지 못했어요. 이 기기의 변경은 보관 중이며 다시 시도할 수 있어요.';
+      this.message=this.phase==='conflict'?'다른 기기에서 먼저 변경했어요. 다른 기기의 내용을 덮어쓰지 않고 저장을 멈췄어요.':'계정 저장을 확인하지 못했어요. 연결을 확인한 뒤 다시 저장해 주세요.';
       this.refreshUI();
     }
   },
   retry: async function(){
-    if(this.pending && this.phase!=='conflict')return this.save(this.pending.payload,this.pending.revision,this.pending.importFingerprint);
+    if(['loading','saving','deleting'].includes(this.phase))return;
+    if(this.phase==='conflict')return;
+    if(this.pending)return this.save(this.pending.payload,this.pending.revision,this.pending.importFingerprint);
     if(this.user)return this.switchUser(this.user,true);
     return this.init();
   },
   reloadRemote: async function(){
-    if(!this.user)return;
-    try{localStorage.removeItem(this.pendingKey(this.user.id));}catch(error){}
-    this.pending=null;await this.switchUser(this.user,true,true);
+    if(!this.user || ['loading','saving','deleting'].includes(this.phase))return;
+    const id=this.user.id,generation=++this.generation,previousPhase=this.phase;
+    this.phase='loading';this.message='계정의 최신 내용을 확인하고 있어요. 불러오기가 완료될 때까지 현재 변경은 유지해요.';this.refreshUI();
+    try{
+      const result=await this.client.from('account_libraries').select('revision,payload').eq('user_id',id).eq('issue_id',ISSUE.id).maybeSingle();
+      if(result.error)throw result.error;
+      if(generation!==this.generation)return;
+      const remote=result.data?normalizeAccountLibrary(result.data.payload):emptyAccountLibrary();
+      applyAccountLibrary(remote);this.revision=result.data?result.data.revision:0;
+      this.pending=null;this.pendingPersisted=false;
+      try{localStorage.removeItem(this.pendingKey(id));}catch(error){}
+      this.phase='ready';this.message='계정의 최신 내용을 불러왔어요.';
+      render();this.refreshUI();await this.loadFeed();
+      if(generation===this.generation)this.finishLoginReturn();
+    }catch(error){
+      if(generation!==this.generation)return;
+      this.phase=previousPhase==='conflict'?'conflict':'error';
+      this.message='계정 내용을 불러오지 못했어요. 현재 변경은 그대로 유지했어요. 연결을 확인한 뒤 다시 불러와 주세요.';
+      this.refreshUI();
+    }
   },
   sendLink: async function(email){
     const validationError=emailValidationMessage(email);

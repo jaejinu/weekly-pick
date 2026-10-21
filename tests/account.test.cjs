@@ -103,3 +103,30 @@ test('review validation names missing fields and handles whitespace and the 80 c
  assert.deepEqual(a.json("reviewValidationErrors({rating:5,text:'가'.repeat(80),day:'평일',waiting:'no'})"),{});
  assert.deepEqual(a.json("Object.keys(reviewValidationErrors({rating:5,text:'가'.repeat(81),day:'평일',waiting:'no'}))"),['text']);
 });
+
+test('failed remote replacement preserves pending payload, storage and displayed changes',async()=>{
+ const a=app();a.run(`account.enabled=true;account.user={id:'owner'};account.phase='conflict';account.pending={revision:2,payload:{...emptyAccountLibrary(),saved:['ex-02']}};account.pendingPersisted=true;applyAccountLibrary(account.pending.payload);localStorage.setItem(account.pendingKey('owner'),JSON.stringify(account.pending));account.client={from:()=>({select(){return this},eq(){return this},maybeSingle:async()=>({error:{code:'NETWORK'}})})};`);
+ const stored=a.storage.get('weeklypick.account.owner.vol-01.pending');
+ await a.run('account.reloadRemote()');
+ assert.equal(a.run('account.phase'),'conflict');assert.deepEqual(a.json('state.saved'),['ex-02']);assert.ok(a.run('account.pending'));assert.equal(a.storage.get('weeklypick.account.owner.vol-01.pending'),stored);
+ a.run(`account.loadFeed=async()=>{};account.client.from=()=>({select(){return this},eq(){return this},maybeSingle:async()=>({data:{revision:3,payload:{...emptyAccountLibrary(),saved:['ex-01']}}})});`);
+ await a.run('account.reloadRemote()');assert.deepEqual(a.json('state.saved'),['ex-01']);assert.equal(a.run('account.pending'),null);assert.equal(a.run('account.revision'),3);assert.equal(a.storage.has('weeklypick.account.owner.vol-01.pending'),false);
+});
+test('pending data is visible when initial account loading fails',async()=>{
+ const a=app();a.run(`account.enabled=true;account.guest=emptyAccountLibrary();localStorage.setItem(account.pendingKey('owner'),JSON.stringify({revision:2,payload:{...emptyAccountLibrary(),saved:['ex-02']}}));account.client={from:()=>({select(){return this},eq(){return this},maybeSingle:async()=>({error:{code:'NETWORK'}})})};`);
+ await a.run("account.switchUser({id:'owner'})");assert.deepEqual(a.json('state.saved'),['ex-02']);assert.equal(a.run('account.pendingPersisted'),true);assert.equal(a.run('account.phase'),'error');
+});
+test('storage failure is reported as memory only and duplicate retries cannot race',async()=>{
+ const a=app();a.run(`account.enabled=true;account.user={id:'owner'};account.phase='ready';account.loadFeed=async()=>{};localStorage.setItem=()=>{throw Error('quota')};globalThis.calls=0;globalThis.finish=null;account.client={rpc:()=>{calls++;return new Promise(r=>{finish=r})}};globalThis.saving=account.save({...emptyAccountLibrary(),saved:['ex-02']},0);`);
+ assert.equal(a.run('account.pendingPersisted'),false);assert.match(a.run('account.pendingNotice()'),/현재 탭/);
+ await a.run('account.retry()');assert.equal(a.run('calls'),1);
+ a.run(`finish({error:{code:'NETWORK'}})`);await a.run('saving');assert.equal(a.run('account.phase'),'error');assert.ok(a.run('account.pending'));
+ a.run(`account.client.rpc=async()=>({data:1});`);await a.run('account.retry()');assert.equal(a.run('account.pending'),null);assert.equal(a.run('account.phase'),'ready');
+});
+test('an old reload cannot replace another account and conflict retry never writes',async()=>{
+ const a=app();a.run(`account.enabled=true;account.user={id:'first'};account.phase='conflict';account.guest=emptyAccountLibrary();account.loadFeed=async()=>{};globalThis.writes=0;globalThis.finish=null;account.client={rpc:async()=>{writes++;},from:()=>({select(){return this},eq(){return this},maybeSingle:()=>new Promise(r=>{finish=r})})};`);
+ await a.run('account.retry()');assert.equal(a.run('writes'),0);
+ a.run('globalThis.loading=account.reloadRemote()');await a.run('account.switchUser(null)');
+ a.run(`finish({data:{revision:3,payload:{...emptyAccountLibrary(),saved:['ex-02']}}})`);await a.run('loading');
+ assert.equal(a.run('account.user'),null);assert.deepEqual(a.json('state.saved'),[]);
+});

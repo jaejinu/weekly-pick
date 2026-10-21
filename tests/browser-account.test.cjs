@@ -138,5 +138,6 @@ const server=http.createServer((req,res)=>{const file=path.resolve(root,'.'+(req
  await page.screenshot({path:'/tmp/weeklypick-privacy-'+engine+'.png',fullPage:true});
  for(const width of [360,390,430]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
  assert.deepEqual(errors,[]);console.log('PASS account ('+engine+'): email request, callback scrub, explicit import, save recovery across reload, logout, review gate, consent/captcha expiry, delete confirmation/failure/retry/cleanup, privacy, same/new-tab login return without replay, import receipt after reload');
+ await require('./browser-sync-recovery.cjs')(browser,base,engine);
  }finally{await browser.close();await new Promise(r=>server.close(r));}
 })().catch(e=>{console.error(e);process.exitCode=1;server.close();});
